@@ -2,14 +2,11 @@
 
 from __future__ import print_function
 import os, sys, subprocess, re 
+import gzip
 
 import warnings
 warnings.filterwarnings("ignore")
 
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 import time, hashlib
 import tempfile
 
@@ -47,7 +44,7 @@ def run_pfam(indir, outdir, pfamdb):
 		#for arg in cmd: s += arg + ' '
 		#info(s)
 
-def parse_pfam(infile, color=None, y=-2.5, size=8):
+def parse_pfam(infile, styledict, color=None, y=-2.75, size=8):
 	entities = []
 	spans = []
 	with open(infile) as f:
@@ -60,16 +57,59 @@ def parse_pfam(infile, color=None, y=-2.5, size=8):
 				#start = int(l[152:157].strip())
 				#end = int(l[158:163].strip())
 				#label = sl[-1]
-				label = sl[1]
+				domain = sl[1]
+				#TODO: pass clandict around to speed up clan searches
+				clan = get_clan(domain)
+
+				style = 3
+				if clan.strip():
+					if clan in styledict: style = styledict[clan]
+					else: 
+						if styledict: style = max(styledict.values())+1
+						style = 3
+						styledict[clan] = style
+				elif domain in styledict:
+					style = styledict[domain]
+				else: 
+					if styledict: style = max(styledict.values())+1
+					else: style = 3
+					styledict[domain] = style
+				#print(styledict)
+
 				start = int(sl[19])
 				end = int(sl[20])
 
 				dy = 0
+				ystep = 0.7
 				for span in spans:
-					if (span[0] <= start <= span[1]) or (span[0] <= end <= span[1]): dy = 0.3
-				entities.append(quod.Region([[start, end]], [y-0.15+dy, 0.15], label, style=color, size=size))
+					if (span[0] <= start <= span[1]) or (span[0] <= end <= span[1]): dy += ystep
+				entities.append(quod.Region([[start, end]], [y-0.2+dy, 0.2], domain, style=style, size=size))
+				#entities.append(quod.Region([[start, end]], [y-0.2+dy+ystep, 0.2], domain, style=style, size=size))
+				#entities.append(quod.Region([[start, end]], [y-0.2+dy+ystep*2, 0.2], domain, style=style, size=size))
+				#entities.append(quod.Region([[start, end]], [y-0.2+dy+ystep*3, 0.2], domain, style=style, size=size))
+				#entities.append(quod.Region([[start, end]], [y-0.2+dy+ystep*4, 0.2], domain, style=style, size=size))
 				spans.append([start, end])
-	return entities
+	return entities, styledict
+
+def parse_blast_tbl(arr):
+	hitdata = {}
+	hitdata['qid'] = arr[0]
+	hitdata['sacc'] = arr[1]
+	hitdata['sid'] = arr[2]
+	hitdata['bitscore'] = float(arr[3])
+	hitdata['expect'] = float(arr[4])
+	hitdata['ident'] = float(arr[5])/100
+	hitdata['qstart'] = int(arr[6])
+	hitdata['qend'] = int(arr[7])
+	hitdata['qlen'] = int(arr[8])
+	hitdata['sstart'] = int(arr[9])
+	hitdata['send'] = int(arr[10])
+	hitdata['slen'] = int(arr[11])
+	hitdata['ssciname'] = arr[12]
+	hitdata['qseq'] = arr[13]
+	hitdata['sseq'] = arr[14]
+
+	return hitdata
 
 def fetch(accessions, email=None, db='protein'):
 	''' grabs PDBs from locally installed TCDB BLAST databases, I'm pretty sure '''
@@ -206,14 +246,29 @@ def seek_initial(p1ds, bcs):
 
 				ls = l.split('\t')
 
+				hitdata = parse_blast_tbl(ls)
+
 				try: 
-					hits[bc][ls[1]].append((float(ls[4]), ls[0], (int(ls[6]), int(ls[7])), (int(ls[9]), int(ls[10]))))
+					#hits[bc][ls[1]].append((float(ls[4]), ls[0], (int(ls[6]), int(ls[7])), (int(ls[9]), int(ls[10]))))
+					hits[bc][ls[1]].append(hitdata)
 				except KeyError: 
-					hits[bc][ls[1]] = [(float(ls[4]), ls[0], (int(ls[6]), int(ls[7])), (int(ls[9]), int(ls[10])))]
+					#hits[bc][ls[1]] = [(float(ls[4]), ls[0], (int(ls[6]), int(ls[7])), (int(ls[9]), int(ls[10])))]
+					hits[bc][ls[1]] = [hitdata]
 
 	for fam in sorted(bcs):
 		for bc in sorted(hits[fam]): 
-			try: hits[fam][bc] = sorted(hits[fam][bc])[0]
+			try: #hits[fam][bc] = sorted(hits[fam][bc])[0]
+				#sortme = [(hits[fam][bc]
+				besteval = None
+				besthit = None
+				for hit in hits[fam][bc]:
+					if besteval is None: 
+						besthit = hit
+						besteval = besthit['expect']
+					elif hit['expect'] < besteval: 
+						besthit = hit
+						besteval = besthit['expect']
+				hits[fam][bc] = besthit
 			except IndexError: error('Could not find any hits for {}/{}: Was psiblast.tbl deleted?'.format(fam, bc))
 	return hits
 
@@ -275,7 +330,27 @@ def clean_fetch(accs, outdir, force=False, email=None):
 	#	f.write(fastas[x])
 	#	f.close()
 
-def quod_set(seqids, sequences, indir, outdir, dpi=300, force=False, bars=[], prefix='', suffix='', silent=False, pars=[]):
+def quod_fragquod(frags, fulls, title, outfile, dpi=300, width=30, height=5.5, kernel=None):
+
+	fig = quod.plt.figure()
+	ax = fig.add_subplot(111)
+	plot = quod.Plot(fig=fig, ax=ax)
+	plot.add(quod.FragmentWhat(frags[0], fulls[0], style=0, kernel=kernel))
+	plot.add(quod.FragmentWhat(frags[1], fulls[1], style=1, kernel=kernel))
+
+	correl, cov = plot[0].entdict['hydro'].get_correlation(plot[1].entdict['hydro'])
+
+
+	plot.width = width
+	plot.height = height
+	plot.render()
+	plot.ax.set_title(title)
+	plot.fig.savefig(outfile, dpi=dpi)
+
+
+	return correl, cov
+
+def quod_set(seqids, sequences, indir, outdir, dpi=300, force=False, bars=[], prefix='', suffix='', silent=False, pars=[], kernel=None):
 	''' generates QUOD plots for batches of sequences '''
 	if not os.path.isdir(outdir): os.mkdir(outdir)
 
@@ -297,22 +372,75 @@ def quod_set(seqids, sequences, indir, outdir, dpi=300, force=False, bars=[], pr
 		medges[-1].append(quod.Wall(spans=[span], y=y, ylim=[0.5,1]))
 
 	domains = []
+	styledict = {}
 	for i, seqid in enumerate(seqids):
-		if i < 2: color = 'red'
-		else: color = 'blue'
-		domains.append(parse_pfam('{}/../pfam/{}.pfam'.format(indir, seqid), color=color))
+		#if i < 2: color = 'red'
+		#else: color = 'blue'
+		#domains.append(parse_pfam('{}/../pfam/{}.pfam'.format(indir, seqid), color=color))
+		entities, styledict = parse_pfam('{}/../pfam/{}.pfam'.format(indir, seqid), styledict=styledict)
+		domains.append(entities)
 
 	#Draw A: barred by B
-	quod.what([sequences[seqids[0]]], force_seq=True, title=seqids[0], imgfmt='png', outdir=outdir, outfile=(seqids[0] + '_' + seqids[1] + '.png'), dpi=dpi, hide=1, entities=wedges[0]+domains[0], silent=True, width=15, height=3)
+	#quod.what([sequences[seqids[0]]], force_seq=True, title=seqids[0], imgfmt='png', outdir=outdir, outfile=(seqids[0] + '_' + seqids[1] + '.png'), dpi=dpi, hide=1, entities=wedges[0]+domains[0], silent=True, width=15, height=3)
+
+	halfwidth = 7.5
+	halfheight = 2
+	fig_a = quod.plt.figure()
+	ax_a = fig_a.add_subplot(111)
+	plot_a = quod.Plot(fig=fig_a, ax=ax_a)
+	plot_a.add(quod.What(sequences[seqids[0]], style=0, kernel=kernel))
+	for e in wedges[0]+domains[0]:
+		plot_a.add(e)
+	plot_a.width = halfwidth
+	plot_a.height = halfheight
+	plot_a.render()
+	plot_a.ax.set_title(seqids[0])
+	plot_a.fig.savefig('{}/{}_{}.png'.format(outdir, seqids[0], seqids[1]), dpi=dpi)
 
 	#Draw B: barred by C
-	quod.what([sequences[seqids[1]]], force_seq=True, title=seqids[1], imgfmt='png', outdir=outdir, outfile=(seqids[1] + '_' + seqids[2] + '.png'), dpi=dpi, hide=1, entities=wedges[1]+medges[0]+domains[1], silent=True, width=15, height=3)
+	#quod.what([sequences[seqids[1]]], force_seq=True, title=seqids[1], imgfmt='png', outdir=outdir, outfile=(seqids[1] + '_' + seqids[2] + '.png'), dpi=dpi, hide=1, entities=wedges[1]+medges[0]+domains[1], silent=True, width=15, height=3)
+	fig_b = quod.plt.figure()
+	ax_b = fig_b.add_subplot(111)
+	plot_b = quod.Plot(fig=fig_b, ax=ax_b)
+	plot_b.add(quod.What(sequences[seqids[1]], style=0, kernel=kernel))
+	for e in wedges[1]+medges[0]+domains[1]:
+		plot_b.add(e)
+	plot_b.width = halfwidth
+	plot_b.height = halfheight
+	plot_b.render()
+	plot_b.ax.set_title(seqids[1])
+	plot_b.fig.savefig('{}/{}_{}.png'.format(outdir, seqids[1], seqids[2]), dpi=dpi)
+
 
 	#Draw C: barred by B
-	quod.what([sequences[seqids[2]]], force_seq=True, title=seqids[2], imgfmt='png', outdir=outdir, outfile=(seqids[2] + '_' + seqids[1] + '.png'), dpi=dpi, hide=1, color=1, entities=wedges[2]+medges[1]+domains[2], silent=True, width=15, height=3)
+	#quod.what([sequences[seqids[2]]], force_seq=True, title=seqids[2], imgfmt='png', outdir=outdir, outfile=(seqids[2] + '_' + seqids[1] + '.png'), dpi=dpi, hide=1, color=1, entities=wedges[2]+medges[1]+domains[2], silent=True, width=15, height=3)
+	fig_c = quod.plt.figure()
+	ax_c = fig_c.add_subplot(111)
+	plot_c = quod.Plot(fig=fig_c, ax=ax_c)
+	plot_c.add(quod.What(sequences[seqids[2]], style=1, kernel=kernel))
+	for e in wedges[2]+medges[1]+domains[2]:
+		plot_c.add(e)
+	plot_c.width = halfwidth
+	plot_c.height = halfheight
+	plot_c.render()
+	plot_c.ax.set_title(seqids[2])
+	plot_c.fig.savefig('{}/{}_{}.png'.format(outdir, seqids[2], seqids[1]), dpi=dpi)
 
 	#Draw D: barred by C
-	quod.what([sequences[seqids[3]]], force_seq=True, title=seqids[3], imgfmt='png', outdir=outdir, outfile=(seqids[3] + '_' + seqids[2] + '.png'), dpi=dpi, hide=1, color=1, entities=wedges[3]+domains[3], silent=True, width=15, height=3)
+	#quod.what([sequences[seqids[3]]], force_seq=True, title=seqids[3], imgfmt='png', outdir=outdir, outfile=(seqids[3] + '_' + seqids[2] + '.png'), dpi=dpi, hide=1, color=1, entities=wedges[3]+domains[3], silent=True, width=15, height=3)
+	fig_d = quod.plt.figure()
+	ax_d = fig_d.add_subplot(111)
+	plot_d = quod.Plot(fig=fig_d, ax=ax_d)
+	plot_d.add(quod.What(sequences[seqids[3]], style=1, kernel=kernel))
+	for e in wedges[3]+domains[3]:
+		plot_d.add(e)
+	plot_d.width = halfwidth
+	plot_d.height = halfheight
+	plot_d.render()
+	plot_d.ax.set_title(seqids[3])
+	plot_d.fig.savefig('{}/{}_{}.png'.format(outdir, seqids[3], seqids[2]), dpi=dpi)
+
+
 
 
 def get_pfam(bc, prefix):
@@ -326,7 +454,7 @@ def get_pfam(bc, prefix):
 				domaindefs.append(l.strip())
 	return domaindefs
 
-def build_html(bc, indir, blasts, outdir='hvordan_out/html', filename='test.html', lastpair=None, nextpair=None, pfam=None):
+def build_html(bc, indir, blasts, outdir='hvordan_out/html', filename='test.html', lastpair=None, nextpair=None, pfam=None, alnstats=None):
 	''' build an HTML report '''
 
 	if not os.path.isdir(outdir): os.mkdir(outdir)
@@ -337,11 +465,93 @@ def build_html(bc, indir, blasts, outdir='hvordan_out/html', filename='test.html
 
 	if not os.path.isfile(outdir + '/assets/openclose.js'):
 		f = open(outdir + '/assets/openclose.js', 'w')
-		f.write('function toggle_section(sectionid, selfid) {\n\tvar section = document.getElementById(sectionid);\n\tvar me = document.getElementById(selfid);\n\t//console.log([section, section.style.display]);\n\tif (section.style.display == \'none\') {\n\t\tsection.style.display = \'block\';\n\t\tme.innerHTML = \'Hide\';\n\t} else { \n\t\tsection.style.display = \'none\'; \n\t\tme.innerHTML = \'Show\';\n\t}\n}')
+		f.write('function toggle_section(sectionid, selfid) {\n\tvar section = document.getElementById(sectionid);\n\tvar me = document.getElementById(selfid);\n\t//console.log([section, section.style.display]);\n\tif (section.style.display == \'none\') {\n\t\tsection.style.display = \'block\';\n\t\tme.innerHTML = \'-\';\n\t} else { \n\t\tsection.style.display = \'none\'; \n\t\tme.innerHTML = \'+\';\n\t}\n}')
 		f.close()
 	if not os.path.isfile(outdir + '/assets/nice.css'):
 		f = open(outdir + '/assets/nice.css', 'w')
-		f.write('body {\n\tfont-family: sans-serif;\n\theight: 100%;\n}\ndiv {\n\tdisplay: block;\n}\ndiv.tcblast {\n\tmax-width: 1500px;\n}\ndiv.fullblast {\n\twidth: 50%;\n\tfloat: left;\n}\ndiv.tabular1 {\n\twidth: 49%;\n\tfloat: left;\n\theight: 100%;\n}\ndiv.tabular2 {\n\twidth: 49%;\n\tfloat: right;\n\theight: 100%;\n}\nimg.bluebarplot {\n\tmax-width: 100%;\n\theight: auto;\n}\n.clear { clear: both; }\n.scrollable {\n\toverflow-y: scroll;\n}\n.resizeable {\n\tresize: vertical;\n\toverflow: auto;\n\tborder: 1px solid gray;\n\tdisplay: block;\n\tpadding-bottom: 1ex;\n}\n.bluebars {\n\theight: 25vh;\n}\n.pairwise {\n\theight: 50vh;\n}\n.whatall {\n\theight: 50vh;\n}\n.whataln {\n\twidth: 100%;\n}\n#seqs {\n\tdisplay: none;\n}\n\n\n\n.summtbl {\n\tfont-family: monospace, courier;\n\tfont-size: 75%;\n}\n.oddrow {\n\tbackground-color: #d8d8d8;\n}\ntd {\n\tpadding-right: 1em;\n}\n.red {\n\tcolor: red;\n}\nimg {\n\tborder: 1pt solid black;\n}\n.monospace {\n\tfont-family: monospace;\n}')
+		#f.write('body {\n\tfont-family: sans-serif;\n\theight: 100%;\n}\ndiv {\n\tdisplay: block;\n}\ndiv.tcblast {\n\tmax-width: 1500px;\n}\ndiv.fullblast {\n\twidth: 50%;\n\tfloat: left;\n}\ndiv.tabular1 {\n\twidth: 49%;\n\tfloat: left;\n\theight: 100%;\n}\ndiv.tabular2 {\n\twidth: 49%;\n\tfloat: right;\n\theight: 100%;\n}\nimg.bluebarplot {\n\tmax-width: 100%;\n\theight: auto;\n}\n.clear { clear: both; }\n.scrollable {\n\toverflow-y: scroll;\n}\n.resizeable {\n\tresize: vertical;\n\toverflow: auto;\n\tborder: 1px solid gray;\n\tdisplay: block;\n\tpadding-bottom: 1ex;\n}\n.bluebars {\n\theight: 25vh;\n}\n.pairwise {\n\theight: 50vh;\n}\n.whatall {\n\theight: 50vh;\n}\n.whataln {\n\twidth: 100%;\n}\n#seqs {\n\tdisplay: none;\n}\n\n\n\n.summtbl {\n\tfont-family: monospace, courier;\n\tfont-size: 75%;\n}\n.oddrow {\n\tbackground-color: #d8d8d8;\n}\ntd {\n\tpadding-right: 1em;\n}\n.red {\n\tcolor: red;\n}\nimg {\n\tborder: 1pt solid black;\n}\n.monospace {\n\tfont-family: monospace;\n}')
+		f.write('''body {
+
+	font-family: sans-serif;
+	height: 100%;
+}
+div {
+	display: block;
+}
+div.tcblast {
+	max-width: 1500px;
+}
+div.fullblast {
+	width: 50%;
+	float: left;
+}
+div.tabular1 {
+	width: 49%;
+	float: left;
+	height: auto;
+}
+div.tabular2 {
+	width: 49%;
+	float: right;
+	height: auto; 
+}
+img.bluebarplot {
+	max-width: 99%;
+	height: auto;
+}
+.clear { clear: both; }
+.scrollable {
+	overflow-y: scroll;
+}
+.resizeable {
+	resize: vertical;
+	overflow: auto;
+	border: 1px solid gray;
+	display: block;
+	padding-bottom: 1ex;
+}
+.bluebars {
+	height: 25vh;
+}
+.pairwise {
+	height: 50vh;
+}
+.whatall {
+	margin: 8pt;
+	/*height: 50vh;*/
+}
+.whataln {
+	width: 100%;
+}
+#seqs {
+	display: none;
+}
+
+
+
+.summtbl {
+	font-family: monospace, courier;
+	font-size: 75%;
+}
+.oddrow {
+	background-color: #d8d8d8;
+}
+td {
+	padding-right: 1em;
+}
+.red {
+	color: red;
+}
+img {
+	border: 1pt solid black;
+}
+.monospace {
+	font-family: monospace;
+}
+.miscinfo {
+	font-size: 4pt;
+}
+		''')
 		f.close()
 	#bc := [WP_1234567890, AP_1234567890]
 	title = 'HVORDAN summary: %s vs %s' % tuple(bc[1:3])
@@ -357,14 +567,15 @@ def build_html(bc, indir, blasts, outdir='hvordan_out/html', filename='test.html
 		if lastpair: out += '<a href="%s_vs_%s.html">&#9664; %s vs %s</a> ' % (lastpair[1], lastpair[2], lastpair[1], lastpair[2])
 		if nextpair: out += '<a href="%s_vs_%s.html">%s vs %s &#9654;</a> ' % (nextpair[1], nextpair[2], nextpair[1], nextpair[2])
 		out += '<br/>'
-	out += '\n<h2>Table of contents</h2>'
-	out += '\n<button class="showhide" id="tocsh" onclick="toggle_section(\'toc\', \'tocsh\')">Hide</button>'
+	out += '\n<h1><button class="showhide" id="tocsh" onclick="toggle_section(\'toc\', \'tocsh\')">-</button>'
+	out += '\nTable of contents</h1>'
 
 	out += '\n<div class="toc" id="toc"> <ol> <li><a href="#summary">Summary</a></li> <li><a href="#tcsummary">TCBLAST Summary</a></li> <li><a href="#pairwise">Pairwise</a></li> <li><a href="#abcd">ABCD hydropathy plots</a></li> <li><a href="#bc">BC hydropathy plot</a></li> <li><a href="sequences">Sequences</a></li> <li><a href="domains">Domains</a></li>  </ol> </div>'
 
 	#stats
-	out += '\n<h2>Summary</h2>'
-	out += '\n<button class="showhide" id="summarysh" onclick="toggle_section(\'summary\', \'summarysh\')">Hide</button>'
+	out += '\n<h2><button class="showhide" id="summarysh" onclick="toggle_section(\'summary\', \'summarysh\')">-</button>'
+	out += '\nSummary</h2>'
+
 	out += '\n<div class="whataln" id="summary">'
 	out += '\nSS Z-score: %s<br/>' % bc[8]
 	out += '\nGSAT Z-score: %s<br/>' % bc[9]
@@ -372,10 +583,11 @@ def build_html(bc, indir, blasts, outdir='hvordan_out/html', filename='test.html
 	out += '\nTarget align-length: %s<br/>' % bc[11]
 	out += '\n</div>'
 
-	out += '\n<h2>TCBLAST</h2>'
 
 	#bluebars
-	out += '\n<button class="showhide" id="tcblastsh" onclick="toggle_section(\'tcblast\', \'tcblastsh\')">Hide</button>'
+	out += '\n<h2><button class="showhide" id="tcblastsh" onclick="toggle_section(\'tcblast\', \'tcblastsh\')">-</button>'
+	out += '\nTCBLAST</h2>'
+
 	out += '\n<div class="tcblast" id="tcblast"><a name="tcsummary"><h3>TCBLAST Summary</h3></a>'
 	out += '\n<div class="resizeable bluebars"><div class="scrollable tabular1">'
 	out += '\n<img class="bluebarplot" src="../graphs/TCBLAST_%s.png"/>' % bc[1]
@@ -384,7 +596,8 @@ def build_html(bc, indir, blasts, outdir='hvordan_out/html', filename='test.html
 	out += '\n</div></div>'
 
 	#pairwise
-	out += '\n<div class="clear"></div><a name="pairwise"><h3>Pairwise</h3></a><div class="resizeable pairwise"><div class="scrollable tabular1">'
+	out += '\n<div class="clear"></div><a name="pairwise">'
+	out += '\n<h3>Pairwise</h3></a><div class="resizeable pairwise"><div class="scrollable tabular1">'
 	out += '\n%s' % blasts[0][1]
 	out += '</div><div class="scrollable tabular2">'
 	out += '\n%s' % blasts[1][1]
@@ -392,47 +605,97 @@ def build_html(bc, indir, blasts, outdir='hvordan_out/html', filename='test.html
 
 
 	#abcd bc
-	out += '\n<div class="clear"></div><a name="abcd"><h3>ABCD Hydropathy plots</h3></a>'
-	out += '\n<button class="showhide" id="abcdsh" onclick="toggle_section(\'abcd\', \'abcdsh\')">Hide</button>'
+	out += '\n<div class="clear"></div><a name="abcd">'
+	out += '\n<h3><button class="showhide" id="abcdsh" onclick="toggle_section(\'abcd\', \'abcdsh\')">-</button>'
+	out += '\nABCD Hydropathy plots</h3></a>'
 
 	out += '\n<div class="whatall" id="abcd">'
 	out += '\n<div class="tabular1">'
 	out += '\nA<br/><img class="bluebarplot" id="plota" src="../graphs/%s_%s.png"/><br/>' % (bc[0], bc[1])
+	out += '\nA-B<br/><img class="bluebarplot" id="plotab" src="../graphs/%s_vs_%s.png"/><br/>' % (bc[0], bc[1])
 	out += '\nB<br/><img class="bluebarplot" id="plotb" src="../graphs/%s_%s.png"/><br/>' % (bc[1], bc[2])
+	if alnstats and 'ab' in alnstats:
+		out += '\nA-B stats:<br/>'
+		out += '\nCorrelation: R = {:0.2f}<br/>'.format(alnstats['ab']['pearson'])
+		out += '\nCoverage: {:0.0%}<br/>'.format(alnstats['ab']['coverage'])
+
 	out += '\n</div><div class="tabular2">'
+
 	out += '\nD<br/><img class="bluebarplot" id="plotd" src="../graphs/%s_%s.png"/><br/>' % (bc[3], bc[2])
+	out += '\nD-C<br/><img class="bluebarplot" id="plotcd" src="../graphs/%s_vs_%s.png"/><br/>' % (bc[3], bc[2])
 	out += '\nC<br/><img class="bluebarplot" id="plotc" src="../graphs/%s_%s.png"/><br/>' % (bc[2], bc[1])
+	if alnstats and 'dc' in alnstats:
+		out += '\nD-C stats:<br/>'
+		out += '\nCorrelation: R = {:0.2f}<br/>'.format(alnstats['dc']['pearson'])
+		out += '\nCoverage: {:0.0%}<br/>'.format(alnstats['dc']['coverage'])
+
 	out += '\n</div></div>'
 
-	out += '\n<div class="clear"></div><br/><a name="bc"><h3>BC hydropathy plot</h3></a>'
-	out += '\n<button class="showhide" id="bcsh" onclick="toggle_section(\'bc\', \'bcsh\')">Hide</button>'
+	out += '\n<div class="clear"></div><br/>'
+	out += '\n<h3><button class="showhide" id="bcsh" onclick="toggle_section(\'bc\', \'bcsh\')">-</button>'
+	out += '\n<a name="bc">BC hydropathy plot</a></h3>'
 	out += '\n<div class="resizeable whataln" id="bc"><div class="scrollable">'
 	out += '<img class="bluebarplot" id="plotbc" src="../graphs/%s_vs_%s.png"/><br/>' % (bc[1], bc[2])
+
+	if alnstats and 'bc' in alnstats:
+		out += '\nB-C stats:<br/>'
+		out += '\nCorrelation: R = {:0.2f}<br/>'.format(alnstats['bc']['pearson'])
+		out += '\nCoverage: {:0.0%}<br/>'.format(alnstats['bc']['coverage'])
+
 	out += '\n</div></div>'
 
 	#out += '\n<button class="showhide" id="tcblastsh" onclick="toggle_section(\'tcblast\', \'tcblastsh\')">Hide</button>'
 
-	out += '\n<br/><div style="height: 10ex"></div>'
-
 	#sequences
-	out += '\n<div class="clear"></div><br/><a name="sequences"><h3>Sequences</h3></a>'
-	out += '\n<button class="showhide" id="seqsh" onclick="toggle_section(\'sequences\', \'seqsh\')">Hide</button>'
+	out += '\n<div class="clear"></div><br/><a name="sequences">'
+	out += '\n<h3><button class="showhide" id="seqsh" onclick="toggle_section(\'sequences\', \'seqsh\')">-</button>'
+	out += '\nSequences</h3></a>'
 	out += '\n<div class="resizeable whataln monospace" id="sequences"><div class="scrollable">'
 	out += ('\n%s\n%s\n%s\n%s' % tuple(bc[4:8])).replace('\n', '<br/>\n')
 	out += '\n</div></div>'
 
 	#pfam
-	out += '\n<div class="clear></div><br/><a name="domains"><h3>Domains</h3></a>'
-	out += '\n<button class="showhide" id="domsh" onclick="toggle_section(\'domains\', \'domsh\')">Hide</button>'
+	out += '\n<div class="clear"></div><br/><a name="domains">'
+	out += '\n<h3><button class="showhide" id="domsh" onclick="toggle_section(\'domains\', \'domsh\')">-</button>'
+	out += '\nDomains</h3></a>'
 	out += '\n<div class="resizeable whataln monospace" id="domains"><div class="scrollable"><pre>'
-	for domainstr in pfam: out += '\n{}<br/>'.format(domainstr)
+	for domainstr in pfam: out += '\n{}<br/>'.format(fmt_pfam(domainstr))
 	out += '\n</pre></div></div>'
+
+	out += '\n<hr/><div class="miscinfo">'
+	out += time.strftime('Generated %Y-%m-%dT%H:%M:%SZ', time.gmtime())
 
 	out += '\n</body></html>'
 
 	f = open(outdir + '/' + filename, 'w')
 	f.write(out)
 	f.close()
+
+def get_clan(domain, clandict=None):
+	if clandict:
+		if domain in clandict: return clandict[domain]
+
+	if '.' in domain: domain = domain[:domain.find('.')]
+
+	with gzip.open(os.environ['PFAMCLANSDB']) as f:
+		for l in f:
+			if domain in l:
+				return l.split('\t')[1]#print(l.split('\t'))
+	return ''
+
+def fmt_pfam(domainstr, clandict=None):
+	domain = re.findall('PF[0-9]{5}', domainstr)[0]
+	clan = get_clan(domain, clandict=clandict)
+	if clan.strip():
+		domainstr = re.sub('(PF[0-9]+)', r'<a href="https://pfam.xfam.org/clan/{}">{}</a>/<a href="https://pfam.xfam.org/family/\1">\1</a>'.format(clan, clan), domainstr)
+	else:
+		domainstr = re.sub('(PF[0-9]+)', r'NOCLAN/<a href="https://pfam.xfam.org/family/\1">\1</a>'.format(clan, clan), domainstr)
+	domainstr = re.sub('([0-9]\.[A-Z]\.[0-9]+\.[0-9]+\.[0-9]+)', r'<a href="http://tcdb.org/search/result.php?tc=\1">\1</a>', domainstr)
+	domainstr = re.sub('([WX]P_[0-9]+)', r'<a href="https://ncbi.nlm.nih.gov/protein/\1">\1</a>', domainstr)
+	domainstr = re.sub('([OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})', r'<a href="https://www.uniprot.org/uniprot/\1">\1</a>', domainstr)
+	domainstr = re.sub('([A-Z]{3}[0-9]{6,})', r'<a href="https://ncbi.nlm.nih.gov/protein/\1">\1</a>', domainstr)
+	domainstr = re.sub(' ([0-9][A-Z][0-9A-Z]{2})', r' <a href="https://ncbi.nlm.nih.gov/protein/\1">\1</a>', domainstr)
+	return domainstr
 
 def get_fulltrans(fams, bcs, abcd):
 	''' collect A, B, C, and D into one convenient data structure '''
@@ -442,7 +705,7 @@ def get_fulltrans(fams, bcs, abcd):
 
 	fulltrans = []
 	for p in pairs:
-		fulltrans.append(tuple([origs[0][p[0]][1], p[0], p[1], origs[1][p[1]][1]]))
+		fulltrans.append(tuple([origs[0][p[0]]['qid'], p[0], p[1], origs[1][p[1]]['qid']]))
 	return fulltrans
 
 def blastem(acc, indir, outdir, dpi=300, force=False, seqbank={}, tmcount={}, maxhits=50):
@@ -577,7 +840,7 @@ def ggsearch(seq1, seq2):
 	return alns
 
 
-def summarize(p1d, p2d, outdir, minz=15, maxz=None, dpi=100, force=False, email=None, musthave=None, thispair=None, fams=None, maxhits=50, pfamdb='./Pfam-A.hmm'):
+def summarize(p1d, p2d, outdir, minz=15, maxz=None, dpi=100, force=False, email=None, musthave=None, thispair=None, fams=None, maxhits=50, pfamdb='./Pfam-A.hmm', kernel=None):
 	''' summarize stuff '''
 	if thispair is not None:
 		if len(thispair) % 2: error('Unpaired sequence found')
@@ -626,7 +889,7 @@ def summarize(p1d, p2d, outdir, minz=15, maxz=None, dpi=100, force=False, email=
 	for fam in abcd:
 		for bc in abcd[fam]:
 			try: pairstats[bc][abcd[fam][bc][1]] = abcd[fam][bc]
-			except KeyError: pairstats[bc] = {abcd[fam][bc][1]:abcd[fam][bc]}
+			except KeyError: pairstats[bc] = {abcd[fam][bc]['qid']:abcd[fam][bc]}
 			#if 'WP_051443908' in pairstats:
 			#	print('#'*80)
 			#	print('WP_051443908', pairstats['WP_051443908'])
@@ -666,8 +929,9 @@ def summarize(p1d, p2d, outdir, minz=15, maxz=None, dpi=100, force=False, email=
 		#bar A
 		#bars.append(pairstats[pair[1]][pair[0]][3])
 		#pars.append(pairstats[pair[1]][pair[0]][2])
-		bars.append(pairstats[pair[1]][pair[0]][2])
-		pars.append(pairstats[pair[1]][pair[0]][3])
+		bars.append([pairstats[pair[1]][pair[0]]['qstart'], pairstats[pair[1]][pair[0]]['qend']])
+		pars.append([pairstats[pair[1]][pair[0]]['sstart'], pairstats[pair[1]][pair[0]]['send']])
+		#pars.append(pairstats[pair[1]][pair[0]][3])
 		#bar B, C
 
 		try: seqb = seqs[pair[1]]
@@ -686,8 +950,10 @@ def summarize(p1d, p2d, outdir, minz=15, maxz=None, dpi=100, force=False, email=
 		#bar D
 		#bars.append(pairstats[pair[2]][pair[3]][3])
 		#pars.append(pairstats[pair[2]][pair[3]][2])
-		bars.append(pairstats[pair[2]][pair[3]][2])
-		pars.append(pairstats[pair[2]][pair[3]][3])
+		#bars.append(pairstats[pair[2]][pair[3]][2])
+		#pars.append(pairstats[pair[2]][pair[3]][3])
+		bars.append([pairstats[pair[2]][pair[3]]['qstart'], pairstats[pair[2]][pair[3]]['qend']])
+		pars.append([pairstats[pair[2]][pair[3]]['sstart'], pairstats[pair[2]][pair[3]]['send']])
 
 		try: subseqs = alnregs[pair[1]][pair[2]]
 		except KeyError: subseqs = alnregs[pair[2]][pair[1]]
@@ -702,12 +968,43 @@ def summarize(p1d, p2d, outdir, minz=15, maxz=None, dpi=100, force=False, email=
 			with open('%s/sequences/%s.fa' % (outdir, x)) as f: seqs[x] = f.read()
 
 	for i in range(0, len(allseqs), 4):
-		quod_set(tuple(allseqs[i:i+4]), seqs, outdir + '/sequences', outdir + '/graphs/', dpi=dpi, force=force, bars=bars[i:i+4], silent=not i, pars=pars[i//2:i//2+2])
+		quod_set(tuple(allseqs[i:i+4]), seqs, outdir + '/sequences', outdir + '/graphs/', dpi=dpi, force=force, bars=bars[i:i+4], silent=not i, pars=pars[i//2:i//2+2], kernel=kernel)
 
 	#make graphs for all pairs of sequences
+	halfwidth = 7.5
+	halfheight = 2
+	i = 0
+
+
+	alnstats = {}
+
 	for s1 in alnregs: 
 		for s2 in alnregs[s1]: 
-			quod.what(alnregs[s1][s2], force_seq=True, labels=[s1,s2], title='%s (red) vs %s (blue)' % (s1,s2), imgfmt='png', outdir=outdir+'/graphs', outfile='%s_vs_%s.png' % (s1,s2), dpi=dpi, hide=1, width=30, height=3)
+			#quod.what(alnregs[s1][s2], force_seq=True, labels=[s1,s2], title='%s (red) vs %s (blue)' % (s1,s2), imgfmt='png', outdir=outdir+'/graphs', outfile='%s_vs_%s.png' % (s1,s2), dpi=dpi, hide=1, width=30, height=3)
+			acc0 = allseqs[i]
+			acc1 = allseqs[i+1]
+			acc2 = allseqs[i+2]
+			acc3 = allseqs[i+3]
+
+			seq1 = open('{}/sequences/{}.fa'.format(outdir, acc1)).read()
+			seq2 = open('{}/sequences/{}.fa'.format(outdir, acc2)).read()
+			correl, cov = quod_fragquod(alnregs[s1][s2], (seq1, seq2), title='{} (red) vs. {} (blue)'.format(s1, s2), outfile='{}/graphs/{}_vs_{}.png'.format(outdir, s1, s2), dpi=dpi, width=halfwidth*2, height=halfheight*2, kernel=kernel)
+
+			alnstats['bc'] = {'pearson': correl, 'coverage': cov}
+			i += 4
+
+			seq0 = open('{}/sequences/{}.fa'.format(outdir, acc0)).read()
+			frag0 = pairstats[acc1][acc0]['qseq']
+			frag1 = pairstats[acc1][acc0]['sseq']
+			frag2 = pairstats[acc2][acc3]['sseq']
+			frag3 = pairstats[acc2][acc3]['qseq']
+			seq3 = open('{}/sequences/{}.fa'.format(outdir, acc3)).read()
+			#A-B
+			correl, cov = quod_fragquod([frag0, frag1], [seq0, seq1], title='{} (red) vs. {} (blue)'.format(acc0, acc1), outfile='{}/graphs/{}_vs_{}.png'.format(outdir, acc0, acc1), dpi=dpi, width=halfwidth, height=halfheight, kernel=kernel)
+			alnstats['ab'] = {'pearson': correl, 'coverage': cov}
+			#C-D
+			correl, cov = quod_fragquod([frag3, frag2], [seq3, seq2], title='{} (red) vs. {} (blue)'.format(acc3, acc2), outfile='{}/graphs/{}_vs_{}.png'.format(outdir, acc3, acc2), dpi=dpi, width=halfwidth, height=halfheight, kernel=kernel)
+			alnstats['dc'] = {'pearson': correl, 'coverage': cov}
 
 	if VERBOSITY: info('Generating TCBLAST plots')
 	blasts = {}
@@ -730,7 +1027,7 @@ def summarize(p1d, p2d, outdir, minz=15, maxz=None, dpi=100, force=False, email=
 			else: lastpair = None
 			if i < (len(fulltrans)-1): nextpair = fulltrans[i+1]
 			else: nextpair = None
-			build_html(pair + tuple(pairseqs) + tuple(stats[pair[1]][pair[2]]), indir=outdir, blasts=blasts[tuple(pair)], outdir=(outdir + '/html'), filename='%s_vs_%s.html' % tuple(pair[1:3]), lastpair=lastpair, nextpair=nextpair)
+			build_html(pair + tuple(pairseqs) + tuple(stats[pair[1]][pair[2]]), indir=outdir, blasts=blasts[tuple(pair)], outdir=(outdir + '/html'), filename='%s_vs_%s.html' % tuple(pair[1:3]), lastpair=lastpair, nextpair=nextpair, alnstats=alnstats)
 	else:
 
 		if minz is None: zmin = '-inf' 
@@ -761,12 +1058,13 @@ if __name__ == '__main__':
 	parser.add_argument('-m', '--max-hits', type=int, default=10, help='how many TCBLAST hits to BLAST for. Contributes significantly to execution time for small famXpander results. {default:10}')
 
 	if 'ENTREZ_EMAIL' in os.environ:
-		parser.add_argument('-e', '--email', default=None, help='Working email in case too many requests get sent and the NCBI needs to initiate contact. Defaults to checking $ENTREZ_EMAIL if set. {current value: %s}' % os.environ['ENTREZ_EMAIL'])
+		parser.add_argument('-e', '--email', default=None, help='Working email in case too many requests get sent and the NCBI needs to initiate contact. Defaults to checking $ENTREZ_EMAIL if set. {current value: $ENTREZ_EMAIL == %s}' % os.environ['ENTREZ_EMAIL'])
 	else: parser.add_argument('-e', '--email', default=None, help='Working email in case too many requests get sent and the NCBI needs to initiate contact. Defaults to checking $ENTREZ_EMAIL if set. {unset}')
 
 	if 'PFAMDB' in os.environ:
 		parser.add_argument('-d', '--pfamdb', default=os.environ['PFAMDB'], help='Which PFAM database to use. Defaults to checking $PFAMDB if set. (default: {})'.format(os.environ['PFAMDB']))
 	else: parser.add_argument('-d', '--pfamdb', default='/ResearchData/pfam/pfamdb/Pfam-A.hmm', help='Which PFAM database to use. Defaults to checking $PFAMDB if set. (default: {})'.format('/ResearchData/pfam/pfamdb/Pfam-A.hmm'))
+	parser.add_argument('--kernel', help='Use one of the named kernels instead of the old-fashioned nearest-neighbor kernel')
 
 	parser.add_argument('-i', metavar='ACC', nargs='+', help='Operate only on pairs containing these accessions')
 	parser.add_argument('-p', metavar='ACC', nargs='+', help='Operate only on these specific pairs.')
@@ -777,4 +1075,4 @@ if __name__ == '__main__':
 		parser.print_help()
 		exit()
 
-	summarize(args.p1d, args.p2d, args.outdir, minz=args.z_min, maxz=args.z_max, dpi=args.dpi, force=args.clobber, email=args.email, musthave=args.i, thispair=args.p, fams=args.fams, maxhits=args.max_hits, pfamdb=args.pfamdb)
+	summarize(args.p1d, args.p2d, args.outdir, minz=args.z_min, maxz=args.z_max, dpi=args.dpi, force=args.clobber, email=args.email, musthave=args.i, thispair=args.p, fams=args.fams, maxhits=args.max_hits, pfamdb=args.pfamdb, kernel=args.kernel)

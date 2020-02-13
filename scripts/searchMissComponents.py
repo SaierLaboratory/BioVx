@@ -229,7 +229,7 @@ def get_output( display ,dcov, overwrite, query, dbname, evalue, coverage, which
 	#pprint.pprint(clan_dic)
 	# create a list for unqualified results and drop rows according to the list in two dataframes
 	bad_hits_blast = []
-	bad_hits_pfam = []
+	#bad_hits_pfam = []
 	no_domain = []
 	for index, row in df.iterrows():
 		'''if '|' in row["qacc"]:
@@ -241,8 +241,8 @@ def get_output( display ,dcov, overwrite, query, dbname, evalue, coverage, which
 			if not set(domain_dic[row["qacc"]]) & set(domain_dic[row["sacc"]]):
 				if not set(clan_dic[row["qacc"]]) & set(clan_dic[row["sacc"]]):
 					df = df.drop(index)
-					bad_hits_pfam.append( row["qacc"] )
-					bad_hits_pfam.append( row["sacc"] )
+					#bad_hits_pfam.append( row["qacc"] )
+					#bad_hits_pfam.append( row["sacc"] )
 		except KeyError:# in the case that the protein has no protein domains
 			if not domain_dic.get(row["qacc"]):
 				df_pfam.loc[-1]=['N/A', 'N/A', 'N/A', 'N/A', 'N/A', row["qacc"], 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A', 'N/A','N/A','N/A','N/A']
@@ -258,7 +258,7 @@ def get_output( display ,dcov, overwrite, query, dbname, evalue, coverage, which
 	# delete rows according two lists
 	df_pfam = df_pfam.drop_duplicates()
 	df_pfam = df_pfam.set_index( 'query_name', drop=True)
-	df_pfam = df_pfam.drop(bad_hits_pfam) # drop by rows
+	#df_pfam = df_pfam.drop(bad_hits_pfam) # drop by rows
 
 	# save new sepeate results
 	df['evalue'] = df['evalue'].apply(lambda x: '%.2e'%x)

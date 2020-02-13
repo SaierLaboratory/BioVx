@@ -20,7 +20,7 @@ class hmmParser( object ):
 		self.parameters = {}  # dict_keys(["Target file", "Option settings", "Program", "Version", "Date", "Current dir", "Pipeline mode", "Query file"])
 		for i, line in enumerate(self.data_hmmfile.split("\n")[-10:-2]):
 			line = line.split(":")
-            		key = line[0][2:]
+			key = line[0][2:]
 			value = line[1].strip()
 			self.parameters[key] = value
 		self.matrix = self.hmmscanParser()

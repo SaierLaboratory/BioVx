@@ -37,9 +37,7 @@ Note 3:
    by the last script hvordan.py, which runs blast and WHAT
    in order to generated an html ouput file that will help
    the user to make the biological interpretation of
-   protocol2 top hits. This is the official repository:
-   
-   https://gitlab.com/khendarg/hvordan
+   protocol2 top hits.
 
 
 The manual is not updated so far. Please note:

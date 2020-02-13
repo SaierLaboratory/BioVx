@@ -526,6 +526,10 @@ class Tools:
             #os.system(hit)
             subprocess.call(hit.split())
 
+    '''
+    Within the function hydro, we added a (0,0) value for the '*' symbols, so that 
+    hydropathies can still be visualized for pseudogenes. - Vasu Pranav Sai Iddamsetty
+    '''
 
     def hydro(self,gseq):
         seq=gseq.replace('-','')
@@ -552,7 +556,8 @@ class Tools:
                  'D':(-3.500,-0.90),
                  'R':(-4.500,-2.53),
                  'X':(0,0),
-                 'U':(0,0)}
+                 'U':(0,0),
+                 '*':(0,0)}
         midpt = (window+1)/2
         length = len(seq)
         hydro = []

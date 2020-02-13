@@ -43,7 +43,18 @@ class annotate:
                 return k
         return False
 
+    '''
+    Within the parse_gap function, we have replaced any '*' character with a '\*',
+    so that the regular expression compiles without interpretting the '*'.
+    - Vasu Pranav Sai Iddamsetty
+    '''
+
     def parse_gap(self):
+
+        if '*' in str(self.gap):
+
+            self.gap = str(self.gap).replace('*','\*')
+
         match=re.search(re.sub('-','',str(self.gap)),str(self.seq.seq))
         # Annotate
         x=match.start()-1
