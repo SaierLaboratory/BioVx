@@ -41,6 +41,14 @@ def LINECOLOR(i):
 
 	else: return 'red'
 
+def to_spans(indexlist):
+	spans = []
+	for i in sorted(indexlist):
+		if not spans: spans.append([i, i])
+		elif i == spans[-1][-1] + 1: spans[-1][-1] += 1
+		else: spans.append([i, i])
+	return spans
+
 class Protein(phoboshop.Protein):
 	pass
 	vspans = []
@@ -72,7 +80,11 @@ class Protein(phoboshop.Protein):
 	def hmmtop(self):
 		fasta = '>untitled\n{}'.format(self.get_sequence())
 		p = subprocess.Popen(['hmmtop', '-if=--', '-pi=spred', '-sf=FAS', '-is=pseudo'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-		out, err = p.communicate(input=fasta)
+		try: out, err = p.communicate(input=fasta)
+		except TypeError:
+			p = subprocess.Popen(['hmmtop', '-if=--', '-pi=spred', '-sf=FAS', '-is=pseudo'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+			out, err = p.communicate(input=fasta.encode('utf-8'))
+			out = out.decode('utf-8')
 
 
 		corrections = []
@@ -98,6 +110,14 @@ class Protein(phoboshop.Protein):
 			if x == targetx: return y
 		return 0
 
+class AlignmentBlock(object):
+	seqlist = None
+	def __init__(self, seqlist=None):
+		self.seqlist = [] if seqlist is None else seqlist
+
+	def __getitem__(self, index):
+		return '\n'.join([seq[index] for seq in self.seqlist])
+
 class Alignment(Protein):
 	vspans = []
 	what = None
@@ -109,10 +129,18 @@ class Alignment(Protein):
 	tmcenters = None
 	simil = None
 	amphipathicity = False
+	occupancy = False
 	def __init__(self, alignments):
-		self.alignments= alignments
+		self.alignments = list(alignments)
 
 	def get_alignments(self): return self.alignments
+
+	def get_sequence(self):
+		for msa in self.alignments:
+			seqlist = [str(record.seq) for record in msa]
+			ablock = AlignmentBlock(seqlist)
+
+		return ablock
 
 	def render(self, style=0):
 		for msa in self.alignments:
@@ -121,12 +149,14 @@ class Alignment(Protein):
 			self.hydro.Y = avehas3.get_average_hydropathies(msa, window=19)
 			self.hydro.X = np.arange(0., len(self.hydro.Y))
 
+			
+
 			self.entities['what'] = self.what
 			entlist = []
 			entlist = [self.what.entities[0]]
 
 			if self.amphipathicity:
-				amphi = quod.Hydropathy('', style=style+2)
+				amphi = quod.Hydropathy('', style='g')
 				amphi.Y = avehas3.get_average_amphipathicities(msa, window=19)
 				amphi.X = np.arange(0, len(amphi.Y))
 				entlist.append(amphi)
@@ -145,6 +175,12 @@ class Alignment(Protein):
 			similcurve.Y = shiftedscores
 			similcurve.X = np.arange(0, len(shiftedscores)) + window//2
 			entlist.append(similcurve)
+
+			if self.occupancy:
+				occcurve = quod.Hydropathy('', style='y')
+				occcurve.Y = avehas3.get_occupancies(msa)
+				occcurve.X = np.arange(len(occcurve.Y))
+				entlist.append(occcurve)
 			
 
 			#what's the worst that can happen???
@@ -482,13 +518,24 @@ class TMWeaver(object):
 		elif event.key == 'm':
 			self.mode = 'mark'
 
+		elif event.key == 'r':
+			self.rotate_format()
+
 		elif event.key == 'w':
 			self.write_tmss()
+
+		elif event.key == 'W':
+			self.write_tmss_relative()
 
 		elif event.key == 'escape':
 			self.mode = 'normal'
 
 		self.update_title()
+
+	def rotate_format(self):
+		cycle = {'fasta':'hmmtop', 'hmmtop':'multiquod', 'multiquod':'ranges', 'ranges':'tsv', 'tsv':'fasta'}
+		print('Switched outfmt from {} to {}'.format(self.outfmt, cycle[self.outfmt]))
+		self.outfmt = cycle[self.outfmt]
 
 	def write_tmss(self):
 		out = ''
@@ -496,7 +543,7 @@ class TMWeaver(object):
 			if self.outfmt == 'fasta':
 				s = ''
 				for i, span in enumerate(sorted(protein.get_spans())):
-					s += '{}_TMS{}\n'.format(protein.header, i+1)
+					s += '>{}_TMS{}\n'.format(protein.header, i+1)
 					s += protein.get_sequence()[span[0]-1:span[1]]
 					s += '\n'
 				out += s + '\n'
@@ -522,11 +569,95 @@ class TMWeaver(object):
 				for span in sorted(protein.get_spans()):
 					for x in span: s += '{}\t'.format(x)
 				out += s.strip() + '\n'
+			else: raise NotImplementedError('Unknown outfmt: {}'.format(self.outfmt))
+
+		out = out.strip()
 
 		if self.append: 
-			with open(self.outfile, 'a') as f: f.write(out)
+			with open(self.outfile, 'a') as f: f.write(out + '\n')
 		else:
-			with open(self.outfile, 'w') as f: f.write(out)
+			with open(self.outfile, 'w') as f: f.write(out + '\n')
+
+	def write_tmss_relative(self):
+		out = ''
+		for protein in self.proteins:
+			seqspanlists = []
+			seqrecords = []
+			if isinstance(protein, Alignment):
+				allspans = set()
+				for span in protein.get_spans():
+					allspans = allspans.union(set([i for i in range(span[0], span[1]+1)]))
+
+				for msa in protein.alignments:
+					for record in msa:
+						seqrecords.append(record)
+						seqresi = 0
+						seqindices = set()
+						for resi, resn in enumerate(record.seq):
+							if resi in allspans: seqindices.add(seqresi)
+
+							if resn in 'ACDEFGHIKLMNPQRSTVWY': seqresi += 1
+						seqspanlists.append(to_spans(seqindices))
+
+			else: #assume it's a sequence-like
+				allspans = set()
+				for span in protein.get_spans():
+					allspans = allspans.union(set([i for i in range(span[0], span[1]+1)]))
+
+				seqrecords.append(protein.record)
+				seqresi = 0
+				seqindices = set()
+				for resi, resn in enumerate(protein.record.seq):
+					if resi in allspans: seqindices.add(seqresi)
+					if resn in 'ACDEFGHIKLMNPQRSTVWY': seqresi += 1
+
+				seqspanlists.append(to_spans(seqindices))
+
+			if self.outfmt == 'fasta':
+				for record, spans in zip(seqrecords, seqspanlists):
+					s = ''
+					for spani, span in enumerate(sorted(spans)):
+						s += '>{}_TMS{}\n'.format(record.id, spani+1)
+						s += record.seq[span[0]-1:span[1]] + '\n'
+					out += '{}\n'.format(s)
+
+			elif self.outfmt == 'hmmtop':
+				for record, spans in zip(seqrecords, seqspanlists):
+					s = '>HA: {} {}  UNK  {}  '.format(len(record.seq), record.id, len(spans))
+					for span in sorted(spans):
+						s += '{}  {}  '.format(span[0], span[-1])
+					out += '{}\n'.format(s)
+
+			elif self.outfmt == 'multiquod':
+				for record, spans in zip(seqrecords, seqspanlists):
+					s = '#add TMSs for {}\n'.format(record.id)
+					s += 'tms add SUBPLOT COLOR '
+					for span in sorted(spans):
+						s += ' {} {}'.format(span[0], span[-1])
+					out += '{}\n'.format(s)
+
+			elif self.outfmt == 'ranges':
+				for record, spans in zip(seqrecords, seqspanlists):
+					s = '{}\t'.format(record.id)
+					for span in sorted(spans):
+						s += '{}-{},'.format(span[0], span[-1])
+					if s.endswith(','): s = s[:-1]
+					out += s + '\n'
+
+			elif self.outfmt == 'tsv':
+				for record, spans in zip(seqrecords, seqspanlists):
+					s = '{}\t'.format(record.id)
+					for span in spans:
+						for x in span: s += '{}\t'.format(x)
+					out += s.strip() + '\n'
+			else: raise NotImplementedError('Unknown outfmt: {}'.format(self.outfmt))
+
+		out = out.strip()
+
+		if self.append: 
+			with open(self.outfile, 'a') as f: f.write(out + '\n')
+		else:
+			with open(self.outfile, 'w') as f: f.write(out + '\n')
 
 	def update_title(self):
 		title = 'Insert title here'
@@ -549,6 +680,8 @@ a - Enter edit mode
 d - Enter deletion mode
 i - Enter edit mode
 m - Enter mark mode
+r - Switch output format
+W - Write cut sequence(s) to disk/stdout with relative indices. TODO: extend to FASTAs, run the selected pipeto program if defined (useful for TMSOC, presumably)
 w - Write cut sequence(s) to disk/stdout. TODO: run the selected pipeto program if defined (useful for TMSOC, presumably)
 ? - Pull up this help page
 ESC - Enter normal mode, which does absolutely nothing
@@ -569,6 +702,7 @@ if __name__ == '__main__':
 	parser.add_argument('-o', metavar='OUTFILE', default='/dev/stdout', help='Where to save the new indices. (default: print to stdout)')
 	parser.add_argument('-m', '--mode', default='multiquod', help='Format to print in indices in. (fasta, hmmtop, \033[1mmultiquod\033[0m, ranges, tsv)')
 	parser.add_argument('--amphipathicity', action='store_true', help='Also plot amphipathicity (currently only implemented for MSAs)')
+	parser.add_argument('--occupancy', action='store_true', help='Also plot occupancy (currently only implemented for MSAs)')
 	parser.add_argument('-a', action='store_true', help='Append to file instead of overwriting')
 	parser.add_argument('--frag', action='store_true', help='Open sequences as fragments (frag1 full1 frag2 full2... fragN fullN)')
 	#TODO: decide how to handle overlapping "TMSs"
@@ -615,6 +749,7 @@ if __name__ == '__main__':
 				alignments = avehas3.AlignIO.parse(f, 'clustal')
 				aln = Alignment(alignments=alignments)
 				aln.amphipathicity = args.amphipathicity
+				aln.occupancy = args.occupancy
 				aln.header = infn
 				tmweaver.add_alignment(aln)
 

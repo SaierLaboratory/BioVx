@@ -53,17 +53,21 @@ class Ancient:
     def initialize_output_tsv( self ):
         with open( self.tsv_output, 'w' ) as output:
             output.write( '\t'.join( ['subject_symbol', 'target_symbol', 'gsat_score', 'aln_length', 'subject_tm_count', 'target_tm_count', 'subject_aln', 'target_aln', '\n'] ))
-    #use hmmtop to get the count of predicted TMSs 
+    
+    #u hmmtop to get the count of predicted TMSs 
     def countTMSs( self, name, seq ):
         with open( "tempfasta.fasta", "w" ) as fasta:
-            fasta.write(">\n" )
+            fasta.write(">{}\n".format( name ))
             fasta.write( str(seq) )
         hmmoutput = subprocess.check_output( ["hmmtop", "-if=tempfasta.fasta"])
         os.remove( "tempfasta.fasta" )
+        
         try: 
-            return hmmoutput.split()[3]
+            #print( "output: " + hmmoutput.split()[3] )
+            return hmmoutput.split()[4]
         except:
-            raise ValueError( "\nERROR: Could not get number of TMS for {}".format( name ))
+            return -1
+            #raise ValueError( "\nERROR: Could not get number of TMS for {}".format( name ))
     def write_output( self, result ):
 
             subject_symbol = result['subject_symbol']
@@ -362,8 +366,10 @@ class Ancient:
                 z = 0
             self.globaldata[ii]['gsat_score'] = z
         self.globaldata.sort(key=lambda x:int(x['gsat_score']),reverse=True)
-
-
+        
+        #added to only add proteins above the min_gsat
+        self.globaldata = [ d for d in self.globaldata if d["gsat_score"] >= self.min_gsat]
+        
         thandle = open(os.environ['ANCIENT_TEMPLATE'],'r')
         template = thandle.read()
         thandle.close()
@@ -492,7 +498,7 @@ FOR DETAILED INSTRUCTIONS - READ THIS MANUAL:
     if ( os.path.exists(cli.input) is False ):
         opts.print_help()
         exit()
-
+    
     AR = Ancient()
     AR.omit_before = cli.omit_before
     AR.omit_after= cli.omit_after

@@ -30,12 +30,12 @@ def pickmax(a, b, c):
 	if maxfont: return maxfont
 	else: return None
 	
-def parse_hmmtop_for_centers(l, correction):
+def hmmtop_centers(l, correction):
 	indices = re.findall('(?: IN| OUT)((?:\s*(?:[0-9]+))+)', l.strip())[0].strip().split()
 	indices = [int(i) for i in indices[1:]]
 	centerlist = []
 	for i in range(0, len(indices), 2):
-		center = ((indices[i] - correction[i]) + (indices[i+1] - correction[i+1])) / 2
+		center = (correction[indices[i]-1] + correction[indices[i+1]-1]) / 2
 		centerlist.append(center)
 	return centerlist
 
@@ -44,23 +44,26 @@ def get_tmcenters(msa):
 	SeqIO.write(msa, tf.name, 'fasta')
 	tf.flush()
 
-	corrlist = []
+	newcorrlist = []
 	for seq in msa:
-		correction = np.zeros(len(seq))
-		delta = 0
-		for i, resn in enumerate(seq): 
-			if resn not in 'ACDEFGHIKLMNPQRSTVWY': delta += 1
-			correction[i] = delta
-		corrlist.append(correction)
+		j = 0
+		correction = {}
+		for i, resn in enumerate(seq):
+			if resn in 'ACDEFGHIKLMNPQRSTVWY': 
+				correction[j] = i
+				j += 1
+		newcorrlist.append(correction)
 
 	out = subprocess.check_output(['hmmtop', '-if={}'.format(tf.name), '-pi=spred', '-is=pseudo', '-sf=FAS'])
-	tmcenters = []
-	for l, correction in zip(out.split('\n'), corrlist):
+	if not isinstance(out, str): out = out.decode('utf-8')
+
+	newtmcenters = []
+	for l, correction in zip(out.split('\n'), newcorrlist):
 		if not l: continue
 
-		tmcenters.extend(parse_hmmtop_for_centers(l, correction))
+		newtmcenters.extend(hmmtop_centers(l, correction))
 	
-	return tmcenters
+	return newtmcenters
 
 def get_similarities(msa, hydro_wt=1., gap_wt=1., index=quod.HYDROPATHY):
 	gap_counts = np.zeros(msa.get_alignment_length())
@@ -133,6 +136,15 @@ def get_average_amphipathicities(msa, window=19, index=quod.AMPHIPATHICITY, angl
 	amphipathicities = np.hstack([[np.nan]*(window//2), amphipathicities])
 	return amphipathicities
 
+def get_occupancies(msa, window=1):
+	occupancies = np.zeros(msa.get_alignment_length())
+
+	for record in msa:
+		for resi, resn in enumerate(record.seq):
+			if resn != '-': occupancies[resi] += 1
+
+	return occupancies / len(msa)
+	
 class TMcenter(quod.Vspans):
 	def __init__(self, centerlist=None, ymin=-3, ymax=-2.5, linewidth=1.5, color='k', alpha=0.2):
 		self.centerlist = [] if centerlist is None else centerlist
@@ -184,6 +196,9 @@ def plot_hydropathies(hydropathies, ax):
 def plot_amphipathicities(amphipathicities, ax):
 	return ax.plot(amphipathicities, 'g', lw=1.0)
 
+def plot_occupancies(occupancies, ax):
+	return ax.plot(occupancies, 'y', lw=1.0)
+
 class Avehas(quod.What):
 	def __init__(self, f, **kwargs):
 
@@ -209,9 +224,11 @@ class Avehas(quod.What):
 		self.rtitle = kwargs.get('rtitle', None)
 
 		self.amphi = kwargs.get('amphi', False)
-		self.entdict = {'hydro': quod.Curve(style=0), 'tms': quod.Vspans(), 'amphi': quod.Curve(style=2), 'simil': quod.Curve(style='gray'), 'tmcenter': TMcenter([])}
+		self.occupancy = kwargs.get('occupancy', False)
+			
+		self.entdict = {'hydro': quod.Curve(style=0), 'tms': quod.Vspans(), 'amphi': quod.Curve(style=2), 'simil': quod.Curve(style='gray'), 'tmcenter': TMcenter([]), 'occupancy':quod.Curve(style='y')}
 		#self.entities = [quod.Curve(style=0), quod.Vspans(), quod.Curve(style=0), TMcenter([])]
-		self.entities = [self.entdict['hydro'], self.entdict['tms'], self.entdict['amphi'], self.entdict['simil'], self.entdict['tmcenter']]
+		self.entities = [self.entdict['hydro'], self.entdict['tms'], self.entdict['amphi'], self.entdict['simil'], self.entdict['tmcenter'], self.entdict['occupancy']]
 		self.linecolor = 'red'
 		self.tmscolor = 'orange'
 
@@ -222,10 +239,11 @@ class Avehas(quod.What):
 		self.tmscolorcenter = '#00000033'
 
 		self.windowsimil = 10
+		self.windowocc = 1
 
 		self.length = 0
 
-		self.parse_alignment(f)
+		self.msa = self.parse_alignment(f)
 
 		self.entdict['hydro'].Y = self.hydropathies
 		self.entdict['hydro'].X = np.arange(0, len(self.hydropathies))
@@ -234,6 +252,11 @@ class Avehas(quod.What):
 		bounds[3] = 6
 		bounds[1] = -3
 		self.entdict['hydro'].bounding_box = bounds
+
+		if self.occupancy:
+			self.entdict['occupancy'].Y = get_occupancies(self.msa, self.windowocc)
+			self.entdict['occupancy'].X = np.arange(0, len(self.entdict['occupancy']))
+			self.entdict['occupancy'].style = 'y'
 
 	#def get_bounding_box(self):
 		#left = 0
@@ -266,6 +289,9 @@ class Avehas(quod.What):
 		self.entdict['tmcenter'].ymax = -2.5
 		self.entdict['tmcenter'].style = self.tmscolorcenter
 		
+
+		if self.occupancy:
+			self.entdict['occupancy']
 
 		for e in self.entities: e.draw(plot)
 
@@ -315,7 +341,23 @@ class Avehas(quod.What):
 		ax.axhline(0, c='k', lw=0.5)
 
 	def __len__(self): return self.length
-	
+
+	def msacoord_to_seqcoord(self, seqid, position):
+		record = None
+		if isinstance(seqid, int): record = self.msa[seqid]
+		else:
+			for seq in self.msa:
+				if seq.id == seqid: record = seq
+		if record is None: raise IndexError('Could not find {}'.format(seqid))
+
+		seqresi = 0
+		for msaresi, resn in enumerate(record.seq): 
+			if position == msaresi: return seqresi
+
+			if resn == '-': continue
+			else: seqresi += 1
+		raise IndexError('Could not reach position {}'.format(seqid))
+
 	def parse_alignment(self, f):
 		alignments = AlignIO.parse(f, 'clustal')
 		for msa in alignments:
@@ -399,13 +441,14 @@ def avehas(f, ax, **kwargs):#, window=19, simwindow=10, grid=False):
 		#what's the worst that can happen???
 		return msa
 
-def test_clustalio(f, window=19):
+def test_clustalio(f, window=19, occupancies=False):
 	alignments = AlignIO.parse(f, 'clustal')
 	for msa in alignments:
 		hydropathies = get_average_hydropathies(msa, window=window)
 		amphipathicities = get_average_amphipathicities(msa, window=window)
 		similarities = get_similarities(msa)
 		tmcenters = get_tmcenters(msa)
+		if occupancies: occs = get_occupancies(msa, window)
 
 		fig = quod.plt.figure()
 		fig.canvas.set_window_title('AveHAS 3')
@@ -416,6 +459,8 @@ def test_clustalio(f, window=19):
 
 		plot_tmcenters(tmcenters, ax, ymin=-3, ymax=-2.5)
 		plot_similarities(similarities, ax, ymin=-3, ymax=-1.5)
+
+		if occupancies: plot_occupancies(occs, ax)
 
 		#ax.grid(1)
 		ax.set_xlim(0, len(hydropathies))
@@ -453,6 +498,8 @@ if __name__ == '__main__':
 	parser.add_argument('--rtitle', help='Right title')
 	parser.add_argument('--rtitlefont', help='Font size for right title')
 
+	parser.add_argument('--occupancy', action='store_true', help='Plot occupancy')
+
 	parser.add_argument('-q', action='store_true', help='Run in noninteractive mode')
 
 	parser.add_argument('infile')
@@ -467,7 +514,7 @@ if __name__ == '__main__':
 		quod.plt.switch_backend(backend)
 
 	with open(args.infile) as f: 
-		fig, ax, msa = test_clustalio(f)
+		fig, ax, msa = test_clustalio(f, occupancies=args.occupancy)
 
 	#CFG stuff
 	if args.grid: ax.grid(1)
