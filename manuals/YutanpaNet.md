@@ -25,7 +25,7 @@ The following Python module needs to be available to the script:
 
 1. **Python 3**  
 You can download the latest version of Python 3 from the [official website](https://www.python.org/).
-The program is tested with vesion 3.7.4 in Mac.
+YutanpaNet was tested with Python 3.7.4 in MacOS Catalina 10.5.6
 
 2. **_blast+ 2.6.0 to 2.10.0_**  
 Other versions of blast may require minor adaptations. Visit the
