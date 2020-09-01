@@ -7,6 +7,9 @@ component and downloads from NCBI all non-redundant proteins containing those ke
 are then BLASTed against the query (meta)genome and for all significant hits hydropathy plots and Pfam domains are
 shown to help the user determine whether a given missing component was found.
 
+## Contributors  
+Yichi Zhang, Arturo Medrano-Soto
+
 
 ## Dependencies
 The following Python module needs to be available to the script: 
