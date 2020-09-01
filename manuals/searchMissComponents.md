@@ -21,8 +21,8 @@ modules are required:
   a) Biopython 1.75  
   b) pandas 0.24.2  
   c) requests 2.24.0  
-  d) formatQuodDomain (included in BioVx distribution)  
-  e) hmmscanParser (included in BioVx distribution)  
+  d) formatQuodDomain (included in the BioVx distribution)  
+  e) hmmscanParser (included in the BioVx distribution)  
 
 2. **_blast+ 2.6.0 to 2.10.0_**  
 Other versions of blast may require minor adaptations. Visit the
