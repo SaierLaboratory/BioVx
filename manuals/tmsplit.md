@@ -13,8 +13,9 @@ Vasu Iddamsetty and Arturo Medrano-Soto
 ## Dependencies
 The following Python module needs to be available to the script: 
 
-1. **tmsFunction**  
-This module is part of the distribution.
+1. **Python 2.X**  
+You can download the Python 2 from the [official website](https://www.python.org/). The 
+custuom module *tmsFunction* is required and is part of the BioVx distribution.  
 
 2. **hmmtop**  
 This program can be downloaded from the [official website](http://www.enzim.hu/hmmtop/).
