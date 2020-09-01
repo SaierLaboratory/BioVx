@@ -4,17 +4,18 @@ The original programs in the suite were originally written by Vamsee Reddy, many
 
 Find below the list of programs available. Scripts developed by our group as dependencies are not listed here but are included in the distribution:  
 
-**1.** protocol1.py  ([Manual](manuals/BioV_manual.pdf))  
-**2.** protocol2.py  ([Manual](manuals/BioV_manual.pdf))  
-**3.** gsat.py       ([Manual](manuals/BioV_manual.pdf))  
-**4.** gblast3.py    ([Manual](manuals/BioV_manual.pdf))    
-**5.** tmstats.py    ([Manual](manuals/BioV_manual.pdf))  
-**6.** tss.py        ([Manual](manuals/BioV_manual.pdf))  
-**7.** ssearch.py    ([Manual](manuals/BioV_manual.pdf))  
-**8.** ancient.py    ([Manual](manuals/AR_INSTRUCTIONS.pdf))   
-**9.** quod.py       ([Manual](https://gitlab.com//khendarg/hvordan/blob/master/docs/quod.md))  
-**10.** hvordan.py   ([Manual](https://gitlab.com/khendarg/hvordan/blob/master/docs/hvordan.md))  
-**11.** tmsplit.py   ([Manual](manuals/tmsplit.md))
+**1.** protocol1.py   ([Manual](manuals/BioV_manual.pdf))  
+**2.** protocol2.py   ([Manual](manuals/BioV_manual.pdf))  
+**3.** gsat.py        ([Manual](manuals/BioV_manual.pdf))  
+**4.** gblast3.py     ([Manual](manuals/BioV_manual.pdf))    
+**5.** tmstats.py     ([Manual](manuals/BioV_manual.pdf))  
+**6.** tss.py         ([Manual](manuals/BioV_manual.pdf))  
+**7.** ssearch.py     ([Manual](manuals/BioV_manual.pdf))  
+**8.** ancient.py     ([Manual](manuals/AR_INSTRUCTIONS.pdf))   
+**9.** quod.py        ([Manual](https://gitlab.com//khendarg/hvordan/blob/master/docs/quod.md))  
+**10.** hvordan.py    ([Manual](https://gitlab.com/khendarg/hvordan/blob/master/docs/hvordan.md))  
+**11.** tmsplit.py    ([Manual](manuals/tmsplit.md))
+**12.** deuterocol.py ([Manual](https://github.com/SaierLaboratory/deuterocol))  
 
 ---  
 
