@@ -1,7 +1,7 @@
 # Documentation for script: _YutanpaNet.py_
 
 ## Summary
-This program applies a graph-based approach to infer complete multicomponent transport
+This program applies a network-based approach to infer complete multicomponent transport
 systems in a (meta)genome. It generates 4 tab-delimited files with the inferences:
 
 1) _"greens.tsv"_, contains the assignments with the highest confidence.  
@@ -14,8 +14,8 @@ sytems with higher chances of being complete.
 4) _"reds.tsv"_, all systems for which the program could not determine whether the 
 systems are present in the genome or not.  
 
-In addition this program generates the following four additional network files that are 
-used by script [_showsubnet.py_](showsubnet.md) to generate a graphical layout of any subnetwork of 
+In addition, this program generates the following four network files that are used by script 
+[_showsubnet.py_](showsubnet.md) to generate a graphical layout of any subnetwork of 
 interest: _raw_network_nodes.txt_, _raw_network_edges.txt_, _recom_network_nodes.txt_, and
 _recom_network_edges.txt_.
 
@@ -34,7 +34,10 @@ YutanpaNet was tested with Python 3.7.4 in MacOS Catalina 10.5.6. The following 
   f) hmmscanParser (part of this distribution)  
   g) more_inertools (part of this distribution)  
   
-2. **_blast+ 2.6.0 to 2.10.0_**  
+2. **Output file of program _getMultCompSystems.pl_
+This program requires the tab-delimited output file of script [_getMultCompSystems.pl_](https://github.com/SaierLaboratory/TCDBtools/blob/master/manuals/getMultCompSystems.md) to generate the network of (meta)genome-TCDB associations.  
+
+3. **_blast+ 2.6.0 to 2.10.0_**  
 Other versions of blast may require minor adaptations. Visit the
 [download site](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download). 
 
