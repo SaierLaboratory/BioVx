@@ -38,7 +38,7 @@ The program _gblast3.py_ was improved by Pranav Iddamsetty
 Gabriel Moreno-Hagelsieb and Arturo Medrano.   
 
 * **Note 5:**  
-The programs _quod.py_, _tcblast.py_, _hvordan.py_ and _deuterocol_ 
+The programs _quod.py_, _tcblast.py_, _hvordan.py_ and _deuterocol.py_ 
 were added by Kevin Hendargo and Arturo Medrano. The script quod.py 
 runs WHAT from the command line on one or more sequences and is able 
 to generate the plots in different formats and qualities. The script 
