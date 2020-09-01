@@ -27,19 +27,19 @@ Some improvements to protocol 2 and other programs
 were introduced by Gabriel Moreno-Hagelsieb.   
 
 * **Note 3:**  
-Pranav Iddamsetty and Arturo Medrano added the scripts
+Pranav Iddamsetty and Arturo Medrano-Soto added the scripts
 _tmsplit.py_ and _tmsFunction.py_. These programs provide a 
 command-line interface to cut transporter sequences
 under the same criteria as the website:  
 http://biotools.tcdb.org/bartms_split.html  
 
 * **Note 4:**  
-The program _gblast3.py_ was improved by Pranav Iddamsetty 
-Gabriel Moreno-Hagelsieb and Arturo Medrano.   
+The program _gblast3.py_ was improved by Pranav Iddamsetty, 
+Gabriel Moreno-Hagelsieb and Arturo Medrano-Soto.   
 
 * **Note 5:**  
 The programs _quod.py_, _tcblast.py_, _hvordan.py_ and _deuterocol.py_ 
-were added by Kevin Hendargo and Arturo Medrano. The script quod.py 
+were added by Kevin Hendargo and Arturo Medrano-Soto. The script quod.py 
 runs WHAT from the command line on one or more sequences and is able 
 to generate the plots in different formats and qualities. The script 
 _tcblast.py_ provides functions to run blast against tcdb from the 
