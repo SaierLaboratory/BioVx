@@ -48,3 +48,7 @@ the last script _hvordan.py_, which runs blast and QUOD in order to
 generate an html ouput file that will help the user to make the 
 biological interpretation of protocol2 top hits.  
 
+* **Note 6:**  
+Programs _searchPseudogenes.py_, _searchMissComponents.py_, _singEasy.py_,
+_YutanpaNet.py_, and _showsubnet.py_ were added by Yichi Zhang and Arturo
+Medrano-Soto.
