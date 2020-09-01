@@ -14,9 +14,9 @@ sytems with higher chances of being complete.
 4) _"reds.tsv"_, all systems for which the program could not determine whether the 
 systems are present in the genome or not.  
 
-In addition this program generates 4 additional network files that are used by
-script _showsubnet.py_ to generate a graphical layout of any subnetwork of interest:
-_raw_network_nodes.txt_, _raw_network_edges.txt_, _recom_network_nodes.txt_, and
+In addition this program generates the following four additional network files that are 
+used by the script _showsubnet.py_ to generate a graphical layout of any subnetwork of 
+interest: _raw_network_nodes.txt_, _raw_network_edges.txt_, _recom_network_nodes.txt_, and
 _recom_network_edges.txt_.
 
 
