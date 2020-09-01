@@ -15,7 +15,7 @@ sytems with higher chances of being complete.
 systems are present in the genome or not.  
 
 In addition this program generates the following four additional network files that are 
-used by the script _showsubnet.py_ to generate a graphical layout of any subnetwork of 
+used by script [_showsubnet.py_](showsubnet.md) to generate a graphical layout of any subnetwork of 
 interest: _raw_network_nodes.txt_, _raw_network_edges.txt_, _recom_network_nodes.txt_, and
 _recom_network_edges.txt_.
 
@@ -23,19 +23,24 @@ _recom_network_edges.txt_.
 ## Dependencies
 The following Python module needs to be available to the script: 
 
-1. **Python 3**  
+1. **Python 3.X**  
 You can download the latest version of Python 3 from the [official website](https://www.python.org/).
-YutanpaNet was tested with Python 3.7.4 in MacOS Catalina 10.5.6
-
+YutanpaNet was tested with Python 3.7.4 in MacOS Catalina 10.5.6. The following modules need to be available:  
+  a) pandas  
+  b) numpy  
+  c) jason  
+  d) networkx  
+  e) Biopython  
+  f) hmmscanParser (part of this distribution)  
+  g) more_inertools (part of this distribution)  
+  
 2. **_blast+ 2.6.0 to 2.10.0_**  
 Other versions of blast may require minor adaptations. Visit the
 [download site](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download). 
 
 
-
 ## Command line options
-The following options are available. You can also run the 
-script without arguments to display the options:
+The following options are available:
 
 
     usage: YutanpaNet.py [-h] -d <raw data table> -tcdb <sequence file> -ra
