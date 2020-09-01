@@ -29,7 +29,7 @@ YutanpaNet was tested with Python 3.7.4 in MacOS Catalina 10.5.6. The following 
   a) Biopython 1.75  
   b) json 0.8.5  
   c) networkx 2.3  
-  d) more-inertools 7.2.0  
+  d) more-itertools 7.2.0  
   e) numpy 1.17.2  
   f) pandas 0.25.1  
   g) hmmscanParser (part of this distribution)
