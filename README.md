@@ -17,6 +17,7 @@ Find below the list of programs available. Scripts developed by our group as dep
 **11.** tmsplit.py    ([Manual](manuals/tmsplit.md))  
 **12.** deuterocol.py ([Manual](https://github.com/SaierLaboratory/deuterocol))  
 **13.** YutanpaNet.py ([Manual](manuals/YutanpaNet.md))  
+**14.** showsubnet.py ([Manual](manuals/showsubnet.md))  
 
 ---  
 
