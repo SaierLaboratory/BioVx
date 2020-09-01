@@ -14,7 +14,7 @@ Find below the list of programs available. Scripts developed by our group as dep
 **8.** ancient.py     ([Manual](manuals/AR_INSTRUCTIONS.pdf))   
 **9.** quod.py        ([Manual](https://gitlab.com//khendarg/hvordan/blob/master/docs/quod.md))  
 **10.** hvordan.py    ([Manual](https://gitlab.com/khendarg/hvordan/blob/master/docs/hvordan.md))  
-**11.** tmsplit.py    ([Manual](manuals/tmsplit.md))  
+**11.** tmsplit       ([Manual](manuals/tmsplit.md))  
 **12.** deuterocol.py ([Manual](https://github.com/SaierLaboratory/deuterocol))  
 **13.** YutanpaNet.py ([Manual](manuals/YutanpaNet.md))  
 **14.** showsubnet.py ([Manual](manuals/showsubnet.md))  
