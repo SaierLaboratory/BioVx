@@ -34,7 +34,7 @@ YutanpaNet was tested with Python 3.7.4 in MacOS Catalina 10.5.6. The following 
   f) hmmscanParser (part of this distribution)  
   g) more_inertools (part of this distribution)  
   
-2. **Output file of program _getMultCompSystems.pl_
+2. **Output file of program _getMultCompSystems.pl_**  
 This program requires the tab-delimited output file of script [_getMultCompSystems.pl_](https://github.com/SaierLaboratory/TCDBtools/blob/master/manuals/getMultCompSystems.md) to generate the network of (meta)genome-TCDB associations.  
 
 3. **_blast+ 2.6.0 to 2.10.0_**  
