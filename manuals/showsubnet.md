@@ -6,6 +6,10 @@ to generate an interactive graphical layout of any subnetwork involving user-spe
 proteins and/or TC systems.
 
 
+## Contributors  
+Yichi Zhang and Arturo Medrano-Soto  
+
+
 ## Dependencies
 The following Python module needs to be available to the script: 
 
