@@ -30,8 +30,7 @@ were introduced by Gabriel Moreno-Hagelsieb.
 Pranav Iddamsetty and Arturo Medrano-Soto added the scripts
 _tmsplit.py_ and _tmsFunction.py_. These programs provide a 
 command-line interface to cut transporter sequences
-under the same criteria as the website:  
-http://biotools.tcdb.org/bartms_split.html  
+under the same criteria as the website: http://biotools.tcdb.org/bartms_split.html  
 
 * **Note 4:**  
 The program _gblast3.py_ was improved by Pranav Iddamsetty, 
