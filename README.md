@@ -38,14 +38,13 @@ The program _gblast3.py_ was improved by Pranav Iddamsetty
 Gabriel Moreno-Hagelsieb and Arturo Medrano.   
 
 * **Note 5:**  
-The programs _quod.py_, _tcblast.py_ and _hvordan.py_ were added 
-by Kevin Hendargo and Arturo Medrano. The script quod.py 
-runs WHAT from the command line on one or more sequences 
-and is able to generate the plots in different formats and 
-qualities. The script _tcblast.py_ provides functions to run 
-blast against tcdb from the command line and provides 
-graphical display that will be used by the last script 
-_hvordan.py_, which runs blast and WHAT in order to generated 
-an html ouput file that will help the user to make the 
+The programs _quod.py_, _tcblast.py_, _hvordan.py_ and _deuterocol_ 
+were added by Kevin Hendargo and Arturo Medrano. The script quod.py 
+runs WHAT from the command line on one or more sequences and is able 
+to generate the plots in different formats and qualities. The script 
+_tcblast.py_ provides functions to run blast against tcdb from the 
+command line and generates a graphical display that will be used by 
+the last script _hvordan.py_, which runs blast and QUOD in order to 
+generate an html ouput file that will help the user to make the 
 biological interpretation of protocol2 top hits.  
 
