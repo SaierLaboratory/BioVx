@@ -19,6 +19,7 @@ Find below the list of programs available. Scripts developed by our group as dep
 **13.** YutanpaNet.py ([Manual](manuals/YutanpaNet.md))  
 **14.** showsubnet.py ([Manual](manuals/showsubnet.md))  
 **15.** searchMissComponents.py ([Manual](manuals/searchMissComponents.md))  
+**16.** searchPseudogenes.py ([Manual](manuals/searchPseudogenes.md))
 
 ---  
 
