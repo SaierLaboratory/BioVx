@@ -8,7 +8,7 @@ are then BLASTed against the query (meta)genome and for all significant hits hyd
 shown to help the user determine whether a given missing component was found.
 
 ## Contributors  
-Yichi Zhang, Arturo Medrano-Soto
+Yichi Zhang and Arturo Medrano-Soto
 
 
 ## Dependencies
