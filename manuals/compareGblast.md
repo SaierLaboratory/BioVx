@@ -7,6 +7,9 @@ This program compares multiple outputs of _GBlast_ and generates a tab-seperated
 summarizing the best hits from each _GBlast_ output for each TCDB protein.
 
 
+## Contributors
+Vasu Iddamsetty and Arturo Medrano-Soto.
+
 ## Dependencies
 The program requires the following in the path to run properly:
 
