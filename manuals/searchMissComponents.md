@@ -1,5 +1,6 @@
 # Documentation for script: _searchMissComponents.py_
 
+
 ## Summary
 When characterizing a multicomponent system in a (meta)genome, often some components in TCDB will not have good 
 matches with proteins in the (meta)genome under study. This script takes functional keywords associated with the missing 
