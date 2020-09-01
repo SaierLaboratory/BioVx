@@ -9,7 +9,7 @@ proteins and/or TC systems.
 ## Dependencies
 The following Python module needs to be available to the script: 
 
-1. **Python 3.* **  
+1. **Python 3.***  
 You can download the latest version of Python 3 from the [official website](https://www.python.org/).
 YutanpaNet was tested with Python 3.7.4 in MacOS Catalina 10.5.6  
 
