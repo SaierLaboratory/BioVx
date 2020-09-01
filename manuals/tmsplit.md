@@ -15,7 +15,7 @@ The following Python module needs to be available to the script:
 
 1. **Python 2.X**  
 You can download the Python 2 from the [official website](https://www.python.org/). The 
-required module *tmsFunction* is part of the BioVx distribution.  
+required module *tmsFunction* is included in the BioVx distribution.  
 
 2. **hmmtop**  
 This program can be downloaded from the [official website](http://www.enzim.hu/hmmtop/).
