@@ -1,14 +1,23 @@
 # Documentation for script: _tmsplit_
 
 ## Summary
-This program cuts protein sequences under 4 different criteria: 1) cut a residue range 
+This program cuts protein sequences under 4 different criteria: 1) cut a residue range,
+2) cut sequence into equal parts, 3) cut into gropus of TMSs, and 4) cut a specified
+range of TMSs.  
+
+
+## Contributors  
+Vasu Iddamsetty and Arturo Medrano-Soto  
 
 
 ## Dependencies
 The following Python module needs to be available to the script: 
 
 1. **tmsFunction**  
-This module is part of the distribution.  
+This module is part of the distribution.
+
+2. **hmmtop**
+This program can be downloaded from the [official website](http://www.enzim.hu/hmmtop/).
 
 
 ## Command line options
