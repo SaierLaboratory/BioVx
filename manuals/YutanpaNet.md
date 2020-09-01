@@ -1,5 +1,6 @@
 # Documentation for script: _YutanpaNet.py_
 
+
 ## Summary
 This program applies a network-based approach to infer complete multicomponent transport
 systems in a (meta)genome. It generates 4 tab-delimited files with the inferences:
@@ -18,6 +19,10 @@ In addition, this program generates the following four network files that are us
 [_showsubnet.py_](showsubnet.md) to generate a graphical layout of any subnetwork of 
 interest: _raw_network_nodes.txt_, _raw_network_edges.txt_, _recom_network_nodes.txt_, and
 _recom_network_edges.txt_.
+
+
+## Contributors  
+Yichi Zhang and Arturo Medrano-Soto  
 
 
 ## Dependencies
