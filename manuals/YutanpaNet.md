@@ -24,7 +24,13 @@ _recom_network_edges.txt_.
 The following Python module needs to be available to the script: 
 
 1. **Python 3**  
-This module is part of the distribution.  
+You can download the latest version of Python 3 from the [official website](https://www.python.org/).
+The program is tested with vesion 3.7.4 in Mac.
+
+2. **_blast+ 2.6.0 to 2.10.0_**  
+Other versions of blast may require minor adaptations. Visit the
+[download site](https://blast.ncbi.nlm.nih.gov/Blast.cgi?PAGE_TYPE=BlastDocs&DOC_TYPE=Download). 
+
 
 
 ## Command line options
