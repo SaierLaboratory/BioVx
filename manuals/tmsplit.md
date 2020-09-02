@@ -1,7 +1,7 @@
 # Documentation for script: _tmsplit_
 
 ## Summary
-This program provides a command-line interface to cuts protein sequences under the same 4 different criteria as the 
+This program cuts protein sequences under the same 4 different criteria as the 
 [official website](http://biotools.tcdb.org/bartms_split.html):  
   1) cut a specified residue range.  
   2) cut a sequence into _N_ equal parts.  
