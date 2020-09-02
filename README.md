@@ -19,7 +19,8 @@ Find below the list of programs available. Scripts developed by our group as dep
 **13.** YutanpaNet.py ([Manual](manuals/YutanpaNet.md))  
 **14.** showsubnet.py ([Manual](manuals/showsubnet.md))  
 **15.** searchMissComponents.py ([Manual](manuals/searchMissComponents.md))  
-**16.** searchPseudogenes.py ([Manual](manuals/searchPseudogenes.md))
+**16.** searchPseudogenes.py ([Manual](manuals/searchPseudogenes.md))  
+**17.** singEasy ([Manual](manuals/singEasy.md))
 
 ---  
 
@@ -27,31 +28,5 @@ Find below the list of programs available. Scripts developed by our group as dep
 The BioV manual needs to be updated.  
 
 * **Note 2:**  
-Some improvements to protocol 2 and other programs
-were introduced by Gabriel Moreno-Hagelsieb.   
-
-* **Note 3:**  
-Pranav Iddamsetty and Arturo Medrano-Soto added the scripts
-_tmsplit.py_ and _tmsFunction.py_. These programs provide a 
-command-line interface to cut transporter sequences
-under the same criteria as the website: http://biotools.tcdb.org/bartms_split.html  
-
-* **Note 4:**  
-The program _gblast3.py_ was improved by Pranav Iddamsetty, 
-Gabriel Moreno-Hagelsieb and Arturo Medrano-Soto.   
-
-* **Note 5:**  
-The programs _quod.py_, _tcblast.py_, _hvordan.py_ and _deuterocol.py_ 
-were added by Kevin Hendargo and Arturo Medrano-Soto. The script quod.py 
-runs WHAT from the command line on one or more sequences and is able 
-to generate the plots in different formats and qualities. The script 
-_tcblast.py_ provides functions to run blast against tcdb from the 
-command line and generates a graphical display that will be used by 
-the last script _hvordan.py_, which runs blast and QUOD in order to 
-generate an html ouput file that will help the user to make the 
-biological interpretation of protocol2 top hits.  
-
-* **Note 6:**  
-Programs _searchPseudogenes.py_, _searchMissComponents.py_, _singEasy.py_,
-_YutanpaNet.py_, and _showsubnet.py_ were added by Yichi Zhang and Arturo
-Medrano-Soto.
+People contributing software to this repository are: Kevin Hendargo, Yichi Zhang, Vasu Iddamsetty, 
+Vamsee Reddy, Gabriel Moreno-Hagelsieb and Arturo Medrano-Soto.    
