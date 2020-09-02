@@ -3,10 +3,14 @@
 
 ## Summary
 This program extracts all single-component transport systems from
-a raw _GBlast_ tab-delimited output table (_results.tsv_). Results are reported in two tab-delimited tables:
-1) the most reliable assignments, and 2) less reliable assignments that requre
-human validation.
-
+a raw _GBlast_ tab-delimited output table (_results.tsv_).
+This program generates three tab-delimited tables:  
+  1) the most reliable assignments (_confident_single.tsv_)  
+  2) less reliable assignments that requre human validation (suspects_single.tsv).  
+  3) hits with multicompoent systems (_suspects_multi.tsv_).
+  This file can be safely ignored as there are other programs that focus on multicomponent systems
+  (i.e., [_getMultCompSystems_](https://github.com/SaierLaboratory/TCDBtools/blob/master/manuals/getMultCompSystems.md), 
+  [YutanpaNet](YutanpaNet.md) and [_showsubnet_](showsubnet.md)).  
 
 ## Contributors  
 Yichi Zhang and Arturo Medrano-Soto
