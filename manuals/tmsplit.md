@@ -1,9 +1,12 @@
 # Documentation for script: _tmsplit_
 
 ## Summary
-This program cuts protein sequences under 4 different criteria: 1) cut a residue range,
-2) cut sequence into equal parts, 3) cut into gropus of TMSs, and 4) cut a specified
-range of TMSs.  
+This program provides a command-line interface to cuts protein sequences under the same 4 different criteria as the 
+[official website](http://biotools.tcdb.org/bartms_split.html):  
+  1) cut a specified residue range.  
+  2) cut a sequence into _N_ equal parts.  
+  3) cut a seqeunce into _N_ gropus of TMSs.  
+  4) cut a specified range of TMSs.  
 
 
 ## Contributors  
