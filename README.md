@@ -20,7 +20,7 @@ Find below the list of programs available. Scripts developed by our group as dep
 **14.** showsubnet.py ([Manual](manuals/showsubnet.md))  
 **15.** searchMissComponents.py ([Manual](manuals/searchMissComponents.md))  
 **16.** searchPseudogenes.py ([Manual](manuals/searchPseudogenes.md))  
-**17.** singEasy ([Manual](manuals/singEasy.md))
+**17.** singEasy.py ([Manual](manuals/singEasy.md))
 
 ---  
 
