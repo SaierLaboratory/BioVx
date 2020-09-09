@@ -1,7 +1,7 @@
 # Documentation for script: _showsubnet.py_
 
 ## Summary
-This program uses the fourr network files created by script [_YutanpaNet.py_](YutanpaNet.md) 
+This program uses the four network files created by script [_YutanpaNet.py_](YutanpaNet.md) 
 to generate an interactive graphical layout of any subnetwork involving user-specified 
 proteins and/or TC systems.
 
