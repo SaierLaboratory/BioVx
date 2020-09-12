@@ -3,12 +3,12 @@
 
 ## Summary
 The output of [_getMultiCompSystems_]() can be quite extensive and thus difficult to interpret. _YutanpaNet_ tackles this challenge by applying a network-based approach to mine such a large data set and identify complete multicomponent systems within a query genome or metagenome. In our strategy, we use a weighted scoring function and a selection function to make the assignments. For each alignment, the program calculates a score that weighs:  
-   a) the E-value,  
-   b) the alignment coverage,  
-   c) the presence of transmembrane vs hydrophilic domains,  
-   d) shared Pfam domains,  
-   e) shared genomic contexts between genes matching the same system, and  
-   f) identified protein fusions.  
+   * the E-value,  
+   * the alignment coverage,  
+   * the presence of transmembrane vs hydrophilic domains,  
+   * shared Pfam domains,  
+   * shared genomic contexts between genes matching the same system, and  
+   * identified protein fusions.  
 _YutanpaNet_ ranks all multicomponent systems identified in the genome and groups them into four categories:  
   1) High confidence: complete systems where every component satisfies all criteria, which are saved in output file "_greens.tsv_".   
   2) medium-high confidence: potentially complete systems but minor issues are observed, e.g., one component shows a good E-value and high coverage but does not have a Pfam match with the domain observed in TCDB. These systems are saved in output file "_yello_greens.tsv_".  
