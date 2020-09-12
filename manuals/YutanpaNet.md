@@ -2,28 +2,18 @@
 
 
 ## Summary
-The output of [_getMultiCompSystems_]() can be quite extensive and thus difficult to interpret. _YutanpaNet_ tackles this challenge by applying a network-based approach to mine such a large data set and identify complete multicomponent systems within a query genome or metagenome. In our strategy, we use a weighted scoring function and a selection function to make the assignments. For each alignment, the program calculates a score that weighs: 
-  a) the E-value, 
-  b) the alignment coverage,  
-  c) the presence of transmembrane vs hydrophilic domains,  
-  d) shared Pfam domains,  
-  e) shared genomic contexts between genes matching the same system, and  
-  f) identified protein fusions.  
+The output of [_getMultiCompSystems_]() can be quite extensive and thus difficult to interpret. _YutanpaNet_ tackles this challenge by applying a network-based approach to mine such a large data set and identify complete multicomponent systems within a query genome or metagenome. In our strategy, we use a weighted scoring function and a selection function to make the assignments. For each alignment, the program calculates a score that weighs:  
+   a) the E-value,  
+   b) the alignment coverage,  
+   c) the presence of transmembrane vs hydrophilic domains,  
+   d) shared Pfam domains,  
+   e) shared genomic contexts between genes matching the same system, and  
+   f) identified protein fusions.  
 _YutanpaNet_ ranks all multicomponent systems identified in the genome and groups them into four categories:  
   1) High confidence: complete systems where every component satisfies all criteria, which are saved in output file "_greens.tsv_".   
-  2) medium-high confidence: potentially complete systems but minor issues are observed, e.g., one component shows a good E-value and high coverage but does not have a Pfam match with the domain observed in TCDB;  
-  3) medium-low confidence: systems may be complete if further research by the user indicates that missing components are not essential for function (e.g., accessory proteins), or that proteins with low coverage include the functionally relevant domains; and  
-  4) low confidence: This would be remaining  systems that could not be completed automatically because too many components  are missing.It generates 4 tab-delimited files with the inferences:
-
-1) _"greens.tsv"_, contains the assignments with the highest confidence.  
-
-2) _"yello_greens.tsv"_, contains less confidence inferences.  
-
-3) _"refined_reds.tsv"_, from the least confident inferences, this file contains the 
-sytems with higher chances of being complete.  
-
-4) _"reds.tsv"_, all systems for which the program could not determine whether the 
-systems are present in the genome or not.  
+  2) medium-high confidence: potentially complete systems but minor issues are observed, e.g., one component shows a good E-value and high coverage but does not have a Pfam match with the domain observed in TCDB. These systems are saved in output file "_yello_greens.tsv_".  
+  3) medium-low confidence: systems may be complete if further research by the user indicates that missing components are not essential for function (e.g., accessory proteins), or that proteins with low coverage include the functionally relevant domains. These systems are saved in output file "_refined_reds.tsv_".  
+  4) low confidence: This would be remaining  systems that could not be completed automatically because too many components are missing. These systems are saved in output file "_reds.tsv_".  
 
 In addition, this program generates the following four network files that are used by script 
 [_showsubnet.py_](showsubnet.md) to generate a graphical layout of any subnetwork of 
