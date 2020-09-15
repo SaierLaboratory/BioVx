@@ -448,9 +448,9 @@ def main():
 		sys.exit(1)
 	else:
 		if ".bz2" in args.genome:
-			genomeFile = 'bzcat {f} | '.format( f=args.genome )
+			genomeFile = 'bzip2 -c {f} | '.format( f=args.genome )
 		elif ".gz" in args.genome:
-			genomeFile = 'zcat {f} | '.format( f=args.genome )
+			genomeFile = 'gunzip -c {f} | '.format( f=args.genome )
 		else:
 			genomeFile = 'cat {f} | '.format( f=args.genome )
 
