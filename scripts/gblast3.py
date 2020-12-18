@@ -468,8 +468,8 @@ class Tools:
 
         print('Loading Substrates')
 
-        substrateData = urlopen('http://tcdb.org/cgi-bin/projectv/getSubstrates.py')
-
+        #substrateData = urlopen('http://tcdb.org/cgi-bin/projectv/getSubstrates.py')
+	substrateData = urlopen('https://tcdb.org/cgi-bin/substrates/getSubstrates.py')
 
         for line in substrateData:
 
