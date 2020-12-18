@@ -1,902 +1,797 @@
 #!/usr/bin/env python
-from __future__ import print_function, division, unicode_literals
-import os
-#if 'MPLBACKEND' not in os.environ: os.environ['MPLBACKEND'] = 'Agg'
-#import matplotlib
-#matplotlib.use('Qt4Agg')
-#from matplotlib.figure import Figure
-from collections import defaultdict
+
+import argparse 
+import configparser
 import shlex
-import argparse
+import libquod
 import re
-import sys
-import io
 import numpy as np
-
-import quod as quod
+import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import matplotlib.transforms as transforms
+import matplotlib
+import os
+import sys
+from Bio import SeqIO, AlignIO
 
-import matplotlib.transforms
+STRICT = False
 
-import warnings
-try: import avehas3
-except ImportError:
-	avehas3 = None
-	warnings.warn('Could not find AveHAS3. AveHAS subplots will be disabled.')
-
-def error(*things):
-	print(*things, file=sys.stderr)
+IMPLICIT_ENTITIES = set((
+	'title', 'ltitle', 'ctitle', 'rtitle',
+	'label', 'xlabel', 'ylabel',
+	'ticks', 'xticks', 'yticks'
+))
+def warn(*things): 
+	print('[WARNING]', *things, file=sys.stderr)
+def error(*things): 
+	print('[ERROR]', *things, file=sys.stderr)
 	exit(1)
 
-def blank_config():
-	#TODO: encapsulate stuff to plot-specific classes
-	cfg = {}
-	cfg['n_rows'] = 0
-	cfg['rowscheme'] = []
-	cfg['subplots'] = set()
-	cfg['sequences'] = defaultdict(lambda: '', {})
-	cfg['outfile'] = None
+class SetOfAllThings(set):
+	def __contains__(self, other): return True
 
-	cfg['frag'] = {}
-	cfg['width'] = 8.5
-	cfg['height'] = 11
-	cfg['hres'] = 100
-	cfg['hgap'] = 0.5
-	cfg['vgap'] = -1.5
-	#cfg['outdir'] = 'magnify_plots'
-	cfg['dpi'] = 300
-	cfg['baselength'] = defaultdict(lambda: None, {})
-	cfg['weight'] = defaultdict(lambda: 1.0, {})
-	cfg['length'] = {}
-	cfg['color'] = {} #defaultdict(lambda: {'line':'red', 'tms':'orange'}))
-	cfg['domains'] = {}
-	cfg['label'] = {}
-	cfg['linestyle'] = defaultdict(lambda: '-', {})
-	cfg['xticks'] = {}
-	cfg['title'] = {}
-	cfg['ltitle'] = {}
-	cfg['ctitle'] = {}
-	cfg['rtitle'] = {}
-	cfg['mode'] = {}
-	cfg['xlim'] = {}
-	cfg['ylim'] = {}
+class _Parsing(object):
+	allstrs = frozenset(['all', 'yes', 'true'])
+	nonestrs = frozenset(['no', 'none', 'false'])
 
-	cfg['xlabel'] = {}
-	cfg['ylabel'] = {}
+	@staticmethod
+	def get_list(cfgstr, dtype=None): 
+		if dtype is None: return shlex.split(cfgstr)
+		else: return [dtype(x) for x in shlex.split(cfgstr)]
 
-	cfg['amphi'] = {}
+	@staticmethod
+	def get_listlist(cfgstr): return [shlex.split(line) for line in cfgstr.split('\n')]
 
-	cfg['text'] = {}
+	@staticmethod
+	def apply_selector(cfgstr, arr, one_indexed=False):
+		if cfgstr.lower() in _Parsing.allstrs: return arr[:]
+		elif cfgstr.lower() == _Parsingnonestrs: return arr[-1:0]
+		#TODO: Find out whether always outputting a list would be a good idea for the above
 
-	cfg['walls'] = {}
+		elif '-' in cfgstr: 
+			ranges = _Parsing.get_list(cfgstr)
+			indices = []
+			for r in ranges:
+				if '-' in r: 
+					start, end = r.split('-')
+					start = int(start)
+					end = int(end)
 
-	cfg['rawcfg'] = ''
-
-	return cfg
-
-def adj_font(args, cfg):
-	name = args[0]
-	if 'font' not in cfg: cfg['font'] = {}
-	if name not in cfg['font']: cfg['font'][name] = {}
-	try: cfg['font'][name][args[1]] = float(args[2])
-	except ValueError: cfg['font'][name][args[1]] = args[2]
-
-def set_prop(args, cfg):
-
-	if len(args) < 1: raise TypeError('Not enough arguments')
-	elif len(args) == 1:
-		if False: pass
-		else: raise TypeError('Unrecognized unary property {}'.format(args[0]))
-	#figure-wide properties
-	elif len(args) == 2:
-		floatprops = (
-			'width',
-			'height',
-			'hgap',
-			'margin',
-			'vgap',
-		)
-		intprops = (
-			'hres',
-			'dpi',
-		)
-		strprops = (
-		#	'mode'
-		)
-		if args[0] in strprops: 
-			cfg[args[0]] = args[1]
-		elif args[0] in floatprops: 
-			try: cfg[args[0]] = float(args[1])
-			except ValueError as e: raise ValueError(e)
-		elif args[0] in intprops: 
-			try: cfg[args[0]] = int(args[1])
-			except ValueError as e: raise ValueError(e)
-		else: raise TypeError('Unrecognized property {}'.format(args[0]))
-	#subplot-wide properties
-	elif len(args) == 3:
-		floatprops = (
-			'xticks',
-			'weight',
-			'baselength',
-		)
-		strprops = (
-			'title',
-			'ltitle',
-			'ctitle',
-			'rtitle',
-			'xlabel',
-			'ylabel',
-		)
-
-		if args[0] in strprops:
-			
-			if args[0] not in cfg: cfg[args[0]] = {}
-			try: cfg[args[0]][args[1]] = args[2]
-			except ValueError as e: raise ValueError(e)
-		elif args[0] in floatprops:
-			try: cfg[args[0]][args[1]] = float(args[2])
-			except ValueError as e: raise ValueError(e)
-	#entity-specific properties
-	#elif len(args) == 4:
-	elif 'linestyle' in args[0] or 'linewidth' in args[0]:
-		#unstable!
-		strprops = (
-			'linestyle',
-			'linestyle.simil',
-			'linestyle.amphi',
-		)
-		floatprops = (
-			'linewidth',
-			'linewidth.simil',
-			'linewidth.amphi',
-		)
-		if args[0] in strprops:
-			try: cfg[args[0]][args[1]][int(args[2])] = args[3]
-			except KeyError: cfg[args[0]][args[1]] = {int(args[2]):args[3]}
-		elif args[0] in floatprops:
-			if args[0] not in cfg: cfg[args[0]] = {}
-			if args[1] not in cfg[args[0]]: cfg[args[0]][args[1]] = {}
-
-			try: cfg[args[0]][args[1]][int(args[2])] = float(args[3])
-			except KeyError: cfg[args[0]][args[1]] = {int(args[2]):float(args[3])}
-		elif args[0] == 'font': adj_font(args[1:], cfg)
-
-	elif len(args) >= 4:
-		if args[0] == 'color':
-			color(args[1:], cfg)
-		elif args[0].startswith('color'):
-			subentity = args[0].split('.')[1]
-			color(args[1:], cfg, subentity=subentity)
-		elif args[0].endswith('lim'):
-			name = args[1]
-			lim = [float(args[2]), float(args[3])]
-			if name in cfg[args[0]]: cfg[args[0]][name] = lim
-			else: cfg[args[0]] = {name:lim}
-			
-		#	if args[1] not in cfg[args[0]]: cfg[args[0]][args[1]] = defaultdict(lambda: {'line':'red', 'tms':'orange'}, {})
-		#	for colspec in args[3:]:
-		#		if colspec.startswith('line:'): 
-		#			cfg[args[0]][args[1]][int(args[2])]['line'] = colspec[5:]
-		#		elif colspec.startswith('tms:'): 
-		#			cfg[args[0]][args[1]][int(args[2])]['tms'] = colspec[4:]
-		#		else: raise ValueError('Invalid color specification {}'.format(colspec))
-		elif args[0].endswith('label'): cfg[args[0]][args[1]] = args[2]
-		elif args[0].endswith('font'): adj_font(args[1:], cfg)
-		else: raise TypeError('Too many arguments')
-	else: raise TypeError('Too many arguments')
-
-	#elif len(args) < 2: raise TypeError('Unrecognized binary property {}'.format(args[0]))
-
-	return cfg
-
-def def_prop(args, cfg, frag=False, mode='quod', amphi=False):
-	if len(args) < 1: raise TypeError('Not enough arguments')
-	else:
-		name = args[0]
-		cfg['subplots'].add(name)
-		cfg['sequences'][name] = []
-		cfg['label'][name] = name
-		cfg['linestyle'][name] = defaultdict(lambda: '-', {})
-		cfg['xticks']['name'] = None
-		cfg['title'][name] = ''
-		cfg['frag'][name] = frag
-		cfg['mode'][name] = mode
-		cfg['amphi'][name] = amphi
-
-		if mode in ('empty',):
-			cfg['baselength'][name] = int(args[1])
+					if one_indexed: start -= 1
+					else: end += 1
+					indices.extend(range(start, end))
+			return [arr[i] for i in indices]
 		else:
-			for i, arg in enumerate(args[1:]):
-				if arg.startswith('seq:'):
-					cfg['sequences'][name].append('>seq_{}\n{}'.format(i+1, arg[4:]))
-				elif arg.startswith('asis:'):
-					cfg['sequences'][name].append('>seq_{}\n{}'.format(i+1, arg[4:]))
-				elif arg.startswith('file:'):
-					with open(arg[5:]) as f:
-						cfg['sequences'][name].append(f.read())
-				else:
-					with open(arg) as f:
-						cfg['sequences'][name].append(f.read())
-	return cfg
+			if one_indexed: return [arr[int(i) - 1] for i in _Parsing.get_list(cfgstr)]
+			else: return [arr[int(i)] for i in _Parsing.get_list(cfgstr)]
 
-def color(cmd, cfg, subentity=None):
-	parser = argparse.ArgumentParser(prog='color')
-	parser.add_argument('subplot', help='Subplot name')
-	#parser.add_argument('seqid', nargs='?', default=0, type=int, help='Sequence index')
-	parser.add_argument('colors', metavar='[SEQID] [line:COLOR1] [tms:COLOR2]', nargs='+', help='Color specification (line:red tms:orange)')
+	@staticmethod
+	def load_sequences(fn):
+		if fn.endswith('.clu') or fn.endswith('.aln'): return AlignIO.parse(fn, 'clustal')
 
-	args = parser.parse_args(cmd)
+		else: return SeqIO.parse(fn, 'fasta')
 
-	try: 
-		seqid = int(args.colors[0])
-		colors = args.colors[1:]
-	except ValueError: 
-		seqid = 0
-		colors = args.colors
+	@staticmethod
+	def load_msa(fn):
+		pass
 
-	if args.subplot not in cfg['color']: cfg['color'][args.subplot] = {}
-	if seqid not in cfg['color'][args.subplot]: cfg['color'][args.subplot][seqid] = {}
+	@staticmethod
+	def get_regions(cfgstr):
+		entlist = []
 
-	#while len(cfg['color'][args.subplot]) <= seqid: 
-	#	cfg['color'][args.subplot].append({'line':'red', 'tms':'orange'})
+		for l in cfgstr.split('\n'):
+			if not l.strip(): continue
+			elif l.strip().startswith('#'): continue
 
-	for colspec in colors:
-		if colspec.startswith('line:'): cfg['color'][args.subplot][seqid]['line'] = colspec[5:]
-		if colspec.startswith('tms:'): cfg['color'][args.subplot][seqid]['tms'] = colspec[4:]
+			else:
+				obj = libquod.entities.Region()
 
-def add_domain(args, cfg): 
-	#, spans=[], yspan=[], label='', style='orange', alpha=None, pos='above', size=8, center=True)
-	name = args[0]
+				tokens = shlex.split(l)
+				for t in tokens:
+					if t.startswith('label:') or t.startswith('text:'): 
+						obj.text = t[t.find(':')+1:]
+					elif t.startswith('fontsize:'): 
+						obj.fontsize = int(t[t.find(':')+1:])
+					elif t.startswith('ha'):
+						obj.halign = t[t.find(':')+1:]
+					elif t.startswith('va'):
+						obj.valign = t[t.find(':')+1:]
+					elif t.startswith('textcolor'):
+						obj.textcolor = t[t.find(':')+1:]
+					elif t.startswith('alpha'):
+						obj.alpha = float(t[t.find(':')+1:])
+					elif t.startswith('color') or t.startswith('fc') or t.startswith('facecolor'):
+						obj.facecolor = t[t.find(':')+1:]
+					elif t.startswith('x:'):
+						spanstr = t[t.find(':')+1:]
+						obj.spans = [[float(x) for x in span.split(':')] for span in spanstr.split(',')]
+					elif t.startswith('y:'):
+						obj.yspan = [float(y) for y in t[t.find(':')+1:].split(':')]
+					else: error('Unrecognized token in region: "{}"'.format(t))
+				entlist.append(obj)
 
-	if len(args) < 6: raise IndexError('Incomplete domain specification (subplot, x1, x2, y1, y2, color[, label, valign, halign, size]')
-	lims = [float(x) for x in args[1:5]]
-	xlim = [lims[:2]]
-	ylim = lims[2:4]
-	ylim[1] -= ylim[0]
-	color = args[5]
+		return entlist
 
-	#b 30 200 -2.8 -2.5 green "A domain" 8 above center
-	#0  1   2    3    4     5         6  7     8      9
-	if len(args) >= 7: label = args[6]
-	else: label = 'unnamed_domain'
+	@staticmethod
+	def get_tmss(cfgstr):
+		entlist = []
 
-	if len(args) >= 8: font = float(args[7])
-	else: font = 8.
+		for l in cfgstr.split('\n'):
+			if not l.strip(): continue
+			elif l.strip().startswith('#'): continue
 
-	if len(args) >= 9: 
-		valign = args[8]
-		try: valign = float(valign)
-		except ValueError: pass
-	else: valign = 'above'
+			else:
+				obj = libquod.entities.HMMTOP()
+				savetext = False
+				textkwargs = {}
 
-	if len(args) >= 10: halign = args[9]
-	else: halign = 'center'
-	#FIXME: add right-align support to quod
-	if halign == 'center': halign = True
-	else: halign = False
+				tokens = shlex.split(l)
+				for t in tokens:
+					if t.startswith('label:') or t.startswith('text:'): 
+						textkwargs['text'] = t[t.find(':')+1:]
+						savetext = True
+					elif t.startswith('fontsize:'): 
+						textkwargs['fontsize'] = int(t[t.find(':')+1:])
+					elif t.startswith('ha:'):
+						textkwargs['halign'] = t[t.find(':')+1:]
+					elif t.startswith('va:'):
+						textkwargs['valign'] = t[t.find(':')+1:]
+					elif t.startswith('textcolor'):
+						textkwargs['textcolor'] = t[t.find(':')+1:]
+					elif t.startswith('alpha'):
+						obj.alpha = float(t[t.find(':')+1:])
+					elif t.startswith('color:') or t.startswith('fc:') or t.startswith('facecolor:'):
+						obj.facecolor = t[t.find(':')+1:]
+					elif t.startswith('x:'):
+						spanstr = t[t.find(':')+1:]
+						obj.spans = [[float(x) for x in span.split(':')] for span in spanstr.split(',')]
+					elif t.startswith('y:'):
+						textkwargs['pos'][1] = float(t[t.find(':')+1:])
+					else: raise ValueError('Unrecognized token in tms: "{}"'.format(t))
+				entlist.append(obj)
+				if savetext: pass
 
-	kwargs = {'xlim':xlim, 'ylim':ylim, 'color':color, 'label':label, 'fontsize':font, 'pos':valign, 'halign':halign}
+		return entlist
 
-	try: cfg['domains'][name].append(kwargs)
-	except KeyError: cfg['domains'][name] = [kwargs]
-	return cfg
-	
-def add_walls(args, cfg):
-	name = args[0]
-	start = int(args[1])
-	end = int(args[2])
-	if len(args) >= 4: y = float(args[3])
-	else: y = 2.
+class MultiquodConfig(object):
+	dpi = None
+	equal = True
+	tight = True
+	width = None
+	height = None
+	outfn = None
+	props = None
 
-	if len(args) >= 5:
-		if args[4] == '+': lim = 1
-		elif args[4] == '-': lim = -1
-		else: lim = None
-	else: lim = None
+	def __init__(self):
+		self.subplots = {} #? or maybe list?
+		self.entities = {}
+		self.rows = []
 
-	if len(args) >= 6: thickness = float(args[5])
-	else: thickness = 1.0
+		self.props = {}
 
-	try: cfg['walls'][name].append({'start':start, 'end':end, 'y':y, 'lim':lim, 'thickness':thickness})
-	except KeyError: cfg['walls'][name] = [{'start':start, 'end':end, 'y':y, 'lim':lim, 'thickness':thickness}]
-	return cfg
+		self.config = configparser.ConfigParser()
+		self.initialize_config()
 
-def add_text(args, cfg):
-	if args[0] != 'xy': raise NotImplementedError('Error parsing "text {}": Coordinate system {} not implemented'.format(' '.join(args), args[0]))
+	#useful mutators
 
-	i = 1
+	def add_row(self, row=None):
+		if row is None: self.rows.append([])
+		else: self.rows.append(row)
 
-	name = args[1]
-	i += 1
-	cfg['text'][name] = {}
 
-	cfg['text'][name]['halign'] = 'l'
-	if args[i].startswith('l'): 
-		cfg['text'][name]['halign'] = 'l'
-		i += 1
-	elif args[i].startswith('c'): 
-		cfg['text'][name]['halign'] = 'c'
-		i += 1
-	elif args[i].startswith('r'): 
-		cfg['text'][name]['halign'] = 'r'
-		i += 1
-	else:
-		try: float(args[i])
-		except ValueError: raise ValueError('Invalid alignment parameter: {}'.format(args[i]))
+	def add_subplot(self, subplot=None):
+		if subplot is None: 
+			name = 'subplot{}'.format(len(self.subplots))
+			subplots[name] = Subplot(name=name)
 
-	x = float(args[i])
-	i += 1
-	y = float(args[i])
-	i += 1
-	cfg['text'][name]['pos'] = [x, y]
 
-	try: 
-		fontsize = float(args[i])
-		i += 1
-	except ValueError: 
-		fontsize = None
+	def render(self):
+		for name in self.subplots: self.subplots[name].render()
 
-	cfg['text'][name]['font'] = fontsize
-	cfg['text'][name]['text'] = args[i]
-	#print(cfg['text'][name])
-	
+		self._allocate_grid()
 
-def parse_config(f, cfg=None):
-	cfg = blank_config() if cfg is None else cfg
 
-	for l in f: cfg['rawcfg'] += l.decode('utf-8')
-	cfg['rawcfg'] += '\n'
+	def _allocate_grid(self):
+		''' An evil method whose only purpose is to produce arbitrarily sized plots '''
 
-	f.seek(0)
+		for row in self.rows:
+			lengths = []
+			for name in row: 
+				length = None
+				if self.subplots[name].length: lengths.append(self.subplots[name].length)
+				else: 
+					try: lengths.append(self.subplots[name].xlim[1] - self.subplots[name].xlim[0])
+					except TypeError: lengths.append(20)
 
-	for linenum, bl in enumerate(f):
-		l = bl.decode('utf-8')
-		if not l.strip(): continue
-		elif l.strip().startswith('#'): continue
-		cmd = shlex.split(bl)
-		if cmd[0] == 'addrow':
-			cfg['rowscheme'].append([])
-			cfg['n_rows'] += 1
-			for name in cmd[1:]:
-				cfg['rowscheme'][-1].append(name)
-				cfg['subplots'].add(name)
+	#IO methods
 
-		elif cmd[0] == 'set':
-			try: set_prop(cmd[1:], cfg)
-			#except TypeError as e: raise TypeError('l. {}: set: {}'.format(linenum+1, e))
-			#except ValueError as e: raise ValueError('l. {}: set: {}'.format(linenum+1, e))
-			except ZeroDivisionError: pass
+	def write(self, fh):
+		out = ''
+		fh.write(out.encode('utf-8'))
 
-		elif cmd[0] == 'def':
-			parser = argparse.ArgumentParser(prog='def')
-			parser.add_argument('--frag', action='store_true', help='Treat these sequences as FRAG FULL pairs')
-			parser.add_argument('--mode', default='quod', help='Plotting mode (avehas, \033[1mquod\033[0m, empty)')
-			parser.add_argument('--amphi', action='store_true', help='Plot amphipathicity in addition to hydropathy where applicable (currently only implemented for mode:avehas')
-			parser.add_argument('label', help='Label for subplot')
-			parser.add_argument('infiles', nargs='+', help='Sequences to load in')
-			args = parser.parse_args(cmd[1:])
 
-			try: def_prop([args.label] + args.infiles, cfg, frag=args.frag, mode=args.mode, amphi=args.amphi)
-			#except TypeError as e: raise TypeError('l. {}: def: {}'.format(linenum+1, e))
-			except ValueError as e: raise ValueError('l. {}: def: {}'.format(linenum+1, e))
+	@staticmethod
+	def load(fn):
+		if not os.path.isfile(fn): raise FileNotFoundError('Could not find file `{}\''.format(fn))
+		obj = MultiquodConfig()
 
-		elif cmd[0] == 'addrow': cfg['rowscheme'].append(cmd[1:])
+		obj.config.read(fn)
 
-		#elif cmd[0] == 'color': 
-		#	try: color(cmd[1:], cfg)
-		#	except TypeError as e: raise TypeError('l. {}: color: {}'.format(linenum+1, e))
-		#	except ValueError as e: raise ValueError('l. {}: color: {}'.format(linenum+1, e))
+		obj.process_config()
 
-		elif cmd[0] == 'add':
-			if cmd[1] == 'domain': add_domain(cmd[2:], cfg)
-			elif cmd[1] == 'walls': add_walls(cmd[2:], cfg)
-			else: raise TypeError('Unrecognized addition: {}'.format(cmd[1]))
+		return obj
 
-		elif cmd[0] == 'tms':
-			if 'tms' not in cfg: cfg['tms'] = []
-			cfg['tms'].append(cmd[1:])
 
-		elif cmd[0] == 'save':
-			if len(cmd) < 2: raise TypeError('l. {}: save needs a filename'.format(linenum+1))
-			cfg['outfile'] = cmd[1]
+	def initialize_config(self):
+		self.config['figure'] = {}
 
-		elif cmd[0] == 'text':
-			if len(cmd) < 6: raise TypeError('l. {}: text: usage: text xy SUBPLOTNAME [HALIGN] X Y [FONTSIZE] "TEXT"')
-			add_text(cmd[1:], cfg)
 
-		else: raise TypeError('l. {}: Unrecognized directive: {}'.format(linenum+1, cmd[0]))
+	def draw(self, fig=None, quiet=False):
+		if fig is None: fig = plt.figure()
 
-	#check that everything in rowscheme has been properly defined
-	for row in cfg['rowscheme']:
-		for name in row:
-			if name not in cfg['subplots']:
-				raise ValueError('Subplot {} not defined'.format(name))
-	return cfg
+		if self.height: fig.set_figheight(self.height, forward=True)
+		if self.width: fig.set_figwidth(self.width, forward=True)
 
-def get_titlefont(cfg, name, subname='title', default=None):
-	if 'font' in cfg:
-		if name in cfg['font']:
-			titlefont = cfg['font'][name].get(subname, default)
-		else: titlefont = None
-	else: titlefont = None
-	return titlefont
+		if self.tight: fig.set_tight_layout(True)
 
-def plot(cfg, name, fig, ax, entities, xlabel=' ', ylabel=None, yticks=None):
-	quodplot = quod.Plot(fig=fig, ax=ax)
-	quodplot.width = cfg['width']
-	quodplot.height = cfg['height']
 
-	if name in cfg['xlim']: quodplot.xlim = cfg['xlim'][name]
-	if name in cfg['ylim']: quodplot.ylim = cfg['ylim'][name]
+		if len(self.subplots) == 1:
+			for name in self.subplots: subplot = self.subplots[name]
+			subplot.ax = fig.gca()
+			
+			subplot.draw()
+			subplot.ax.set_xlim(subplot.xlim)
+			subplot.ax.set_ylim(subplot.ylim)
 
-	for i, e in enumerate(entities):
-		if quod.is_what(e):
-			e.set_style(i)
-			if (name in cfg['color']) and (i in cfg['color'][name]):
-				e.set_tms_color(cfg['color'][name][i]['tms'])
-				e.set_curve_color(cfg['color'][name][i]['line'])
-			if 'linestyle' in cfg and name in cfg['linestyle']:
-				if i in cfg['linestyle'][name]: e.set_linestyle(cfg['linestyle'][name][i])
-			if 'linewidth' in cfg and name in cfg['linewidth']:
-				if i in cfg['linewidth'][name]: e.set_linewidth(cfg['linewidth'][name][i])
+			subplot.ax.axhline(0, color='k', lw=1)
+
+		elif len(self.subplots) == len(self.rows): 
+			gs = gridspec.GridSpec(len(self.rows), 1, figure=fig)
+
+			for rowi, row in enumerate(self.rows):
+				subplot = self.subplots[row[0]]
+				subplot.ax = fig.add_subplot(gs[rowi,:])
+			
+				subplot.draw()
+				subplot.ax.set_xlim(subplot.xlim)
+				subplot.ax.set_ylim(subplot.ylim)
+				subplot.ax.axhline(0, color='k', lw=1)
+
+		elif self.equal: #aka hvordanlike
+			grids = {}
+			for row in self.rows: 
+				if len(row) in grids: continue
+				grids[len(row)] = gridspec.GridSpec(len(self.rows), len(row), figure=fig)
+
+			for rowi, row in enumerate(self.rows):
+				gs = grids[len(row)]
+				for subploti, name in enumerate(row):
+					subplot = self.subplots[name]
+					subplot.ax = fig.add_subplot(gs[rowi,subploti])
+
+					subplot.draw()
+					subplot.ax.set_xlim(subplot.xlim)
+					subplot.ax.set_ylim(subplot.ylim)
+					subplot.ax.axhline(0, color='k', lw=1)
+
+		else: #:( what a nightmare!
+			gs = gridspec.GridSpec(len(self.rows), 1, figure=fig)
+			if self.tight: gs.tight_layout(fig)
+			for rowi, row in enumerate(self.rows):
+				xlimlist = []
+				for subploti, name in enumerate(row):
+					subplot = self.subplots[name]
+					if subplot.length is not None: xlimlist.append(subplot.length)
+					else:
+						xlim, ylim = subplot.get_tightbbox()
+
+						if xlim[0] is None or xlim[1] is None: xlimlist.append(None)
+						else: xlimlist.append(xlim[1] - xlim[0])
+
+				if None in xlimlist: raise ValueError
+
+				#FIXME: this probably breaks horribly on metric systems!
+				rowspec = gridspec.GridSpecFromSubplotSpec(1, len(row), subplot_spec=gs[rowi], width_ratios=xlimlist, wspace=45/72/6.4**2*fig.get_figwidth())
+
+				for subploti, name in enumerate(row):
+					subplot = self.subplots[name]
+					subplot.ax = fig.add_subplot(rowspec[:, subploti:subploti+1])
+
+					subplot.draw()
+					subplot.ax.set_xlim(subplot.xlim)
+					subplot.ax.set_ylim(subplot.ylim)
+					subplot.ax.axhline(0, color='k', lw=1)
+
+		for name in self.subplots: 
+			subplot = self.subplots[name]
+			if subplot.xscale is not None:
+				xlim = subplot.ax.get_xlim()
+
+				if xlim[1] % subplot.xscale: xmax = xlim[1]
+				else: xmax = xlim[1] + subplot.xscale
+
+				subplot.ax.set_xticks(np.arange(xlim[0], xmax, subplot.xscale))
+
+			if subplot.yscale is not None:
+				ylim = subplot.ax.get_ylim()
+
+				if ylim[1] % subplot.yscale: ymax = ylim[1]
+				else: ymax = ylim[1] + subplot.yscale
+
+				subplot.ax.set_yticks(np.arange(ylim[0], ylim[1]+subplot.yscale, subplot.yscale))
+
+			if subplot.legend: subplot.ax.legend()
+
+
+		if self.outfn is not None: fig.savefig(self.outfn, dpi=self.dpi)
+
+		#FIXME: don't always show
+		if not quiet: 
+			plt.show()
+
+		#FIXME: don't always close in case the user wants to make further modifications to fig
+		else: plt.close()
+
+		return fig
+		
+
+	#parsing methods
+
+	def process_config(self):
+		#preprocessing step
+		for section in self.config.sections():
+			if section.startswith('subplots.'): 
+				name = section[section.find('.')+1:]
+				self.subplots[name] = Subplot(name=name)
+
+		for section in self.config.sections():
+			if section == 'figure':
+				for key in self.config[section]:
+					if key == 'rows': 
+						self.rows = _Parsing.get_listlist(self.config[section][key])
+						for row in self.rows:
+							for name in row:
+								if name not in self.subplots: self.subplots.update({name:Subplot(name)})
+					elif key == 'dpi':
+						self.dpi = self.config[section].getint('dpi')
+					elif key == 'equal':
+						self.equal = self.config[section].getboolean('equal')
+					elif key == 'height':
+						self.height = self.config[section].getfloat('height')
+					elif key == 'save':
+						self.outfn = self.config[section].get('save')
+					elif key == 'tight':
+						self.tight = self.config[section].getboolean('tight')
+					elif key == 'width':
+						self.width = self.config[section].getfloat('width')
+
+					elif '.' in key: 
+						entname, propname = key.split('.')
+						if propname == 'font': self.add_prop(entname, propname, self.config[section].getfloat(key))
+						elif propname == 'color': self.add_prop(entname, propname, self.config[section].get(key))
+						elif propname == 'linewidth': self.add_prop(entname, propname, self.config[section].getfloat(key))
+						elif 'size' in propname: self.add_prop(entname, propname, self.config[section].getfloat(key))
+						elif 'alpha' in propname: self.add_prop(entname, propname, self.config[section].getfloat(key))
+						else: self.add_prop(entname, propname, self.config[section].get(key))
+						
+					elif not STRICT: warn('Unrecognized key in [layout]: "{}"'.format(key))
+
+					else: error('Unrecognized key in [layout]: "{}"'.format(key))
+
+			elif section.startswith('subplots.'):
+				name = section[section.find('.')+1:]
+				self.subplots[name].process_config(self.config[section])
+		if self.subplots and not self.rows:
+			for name in self.subplots: self.rows.append([name])
+
+		#apply global props where necessary
+		for entname in self.props:
+			for propname in self.props[entname]:
+				value = self.props[entname][propname]
+
+				for subplotname in self.subplots:
+					subplot = self.subplots[subplotname]
+					subplot.add_prop(entname, propname, value, force=False)
+
+	def add_prop(self, entname, propname, value):
+		if entname not in self.props: self.props[entname] = {}
+		if propname not in self.props[entname]: self.props[entname][propname] = {}
+		self.props[entname][propname] = value
+
+
+	#comparison methods
+
+	def __eq__(self, other):
+		if not isinstance(other, type(self)): return False
 		else:
-			if avehas3 is not None:
-				if type(e) is avehas3.Avehas:
-					e.set_style(i)
-					if (name in cfg['color']) and (i in cfg['color'][name]):
-						e.entities[0].style = cfg['color'][name][i]['line']
-						e.entities[1].style = cfg['color'][name][i]['tms']
-					#if 'linestyle' in cfg and name in cfg['linestyle']:
-					#	if i in cfg['linestyle'][name]: e.entities[0].linestyle = cfg['linestyle'][name][i]
-					#if 'linewidth' in cfg and name in cfg['linewidth']:
-					#	if i in cfg['linewidth'][name]: e.entities[0].linewidth = cfg['linewidth'][name][i]
-					#	if i in cfg['linewidth'][name]: e.entities[1].linewidth = cfg['linewidth'][name][i]
-					for prop in cfg:
-						#UNSTABLE!!!
-						if prop.startswith('linewidth') and name in cfg[prop]:
-							if '.' not in prop: 
-								if i in cfg['linewidth'][name]: e.entdict['hydro'].linewidth = cfg['linewidth'][name][i]
-								if i in cfg['linewidth'][name]: e.entdict['amphi'].linewidth = cfg['linewidth'][name][i]
-								if i in cfg['linewidth'][name]: e.entdict['simil'].linewidth = cfg['linewidth'][name][i]
-							else:
-								sp = prop.split('.')
-								rootprop = sp[0]
-								if sp[1] == 'simil': e.linewidthsimil = cfg[prop][name][i]
-								elif sp[1] == 'amphi': e.linewidthamphi = cfg[prop][name][i]
-								
-						if prop.startswith('linestyle') and name in cfg[prop]:
-							if '.' not in prop:
-								if i in cfg['linestyle'][name]: e.entities[0].linestyle = cfg['linestyle'][name][i]
-							else:
-								sp = prop.split('.')
-								rootprop = sp[0]
-								if sp[1] == 'simil': e.linestylesimil = cfg[prop][name][i]
-								elif sp[1] == 'amphi': e.linestyleamphi = cfg[prop][name][i]
-		quodplot.add(e)
-	quodplot.render()
-
-	ax.set_xlabel(xlabel)
-	#ax.set_title(cfg['title'].get(name, ''), fontsize=get_titlefont(cfg, name))
-	ax.set_title('')
-	if ylabel is not None: ax.set_ylabel(ylabel)
-	if yticks is not None: ax.set_yticks(yticks)
-
-	if name in cfg['xticks']:
-		xlim = ax.get_xlim()
-		ax.set_xticks(np.arange(xlim[0], xlim[1], cfg['xticks'][name]))
-
-def do_tms_stuff(entities, cfg):
-
-	if 'tms' not in cfg: return
-
-	def list2line(l):
-		s = ''
-		for x in l: s += x + ' '
-		return s.strip()
-	for cmd in cfg['tms']:
-		if cmd[0] == 'add':
-			if len(cmd) < 5: raise TypeError('tms: Not enough arguments: {}'.format(list2line(cmd)))
-
-			parser = argparse.ArgumentParser(prog='tms add')
-			parser.add_argument('name', help='Which subplot to perform on')
-			parser.add_argument('--color', help='Color of TMS')
-			parser.add_argument('indices', nargs='+', type=int, help='Indices to draw TMSs for')
-			args = parser.parse_args(cmd[1:])
-
-			if len(args.indices) % 2: 
-				seqi = args.indices[0]
-				spans = args.indices[1:]
-			else:
-				seqi = None
-				spans = args.indices
-
-
-			spans = [spans[i:i+2] for i in range(0, len(spans), 2)]
-
-			if seqi is None:
-				if args.color is None: color = 'orange'
-				else: color = args.color
-				entities[args.name].append(quod.HMMTOP('', nohmmtop=True, style=color))
-				entities[args.name][-1].spans = spans
-			else:
-				si = 0
-				found = False
-				for ei, e in enumerate(entities[args.name]):
-					try: e.entities
-					except AttributeError: continue
-					try: e.entities[1]
-					except IndexError: continue
-
-					if si == seqi:
-						e.entities[1].spans += spans
-						#if args.color is not None: e.entities[1].style = args.color
-						if args.color is not None: 
-							if args.name not in cfg['color']: cfg['color'][args.name] = []
-							while len(cfg['color'][args.name]) <= si: 
-								cfg['color'][args.name].append({'line':'red', 'tms':'orange'})
-							cfg['color'][args.name][si]['tms'] = args.color
-						#	cfg['color'][args.name][ei]['tms'] = args.color
-						found = True
-						break
-					else: si += 1
-				if not found:
-					raise ValueError('tms: Could not find subplot {} sequence {}: {}'.format(args.name, seqi, ' '.join(cmd)))
-
-		elif cmd[0] in ('load', 'append'):
-			if len(cmd) < 4: raise TypeError('tms: Not enough arguments: {}'.format(list2line(cmd)))
-			name = cmd[1]
-			seqi, color = None, None
-			try: seqi = int(cmd[2])
-			except ValueError: color = cmd[2]
-			spans = []
-			for rawfn in cmd[3:]:
-				if rawfn.startswith('file:'): fn = rawfn[5:]
-				else: fn = rawfn
-				with open(fn) as f:
-					for l in f:
-						raw = re.findall('(?:[0-9]+\s*)+$', l.strip())
-						if not raw: continue
-						else:
-							for s in raw: 
-								indices = [int(x) for x in s.split()]
-								for i in range(len(indices)%2, len(indices), 2):
-									spans.append(indices[i:i+2])
-						#print(re.findall('(?:[0-9]+\s*)+$', l.strip()))
-			if seqi is None:
-				entities[name].append(HMMTOP('', style=color, nohmmtop=True))
-				entities[name][-1].spans = spans
-			else:
-				si = 0
-				found = False
-				for ei, e in enumerate(entities[name]):
-					if si == seqi:
-						if cmd[0] == 'load': e.entities[1].spans = spans
-						elif cmd[0] == 'append': e.entities[1].spans += spans
-						else: raise Exception('Impossible exception')
-						found = True
-						break
-					if quod.is_what(e): si += 1
-				if not found: 
-					raise ValueError('tms: Could not find subplot {} sequence {}: {}'.format(name, seqi, list2line(cmd)))
-
-		elif cmd[0] == 'erase':
-			if len(cmd) < 3: raise TypeError('tms: Not enough arguments: {}'.format(list2line(cmd)))
-			name = cmd[1]
-			spans = []
-
 			try: 
-				for i in range(3, len(cmd), 2): spans.append([int(x) for x in cmd[i:i+2]])
-			except ValueError:
-				if cmd[-1] == 'all': spans.append([-9e9, 9e9])
-				else: raise ValueError('tms: Malformed indices: {}'.format(list2line(cmd)))
-
-			si = 0
-			seqi = int(cmd[2])
-				
-			found = False
-
-			#TODO: automerge eraser targets
-
-			for ei, e in enumerate(entities[name]):
-				if si == seqi:
-
-					popme = []
-					appendme = []
-					try: assert e.iswhat
-					except AttributeError: continue #not a WHAT-like object
-					except AssertionError: continue #not sufficiently what-like to qualify
-
-					for i, oldspan in enumerate(e.entities[1].spans):
-						for eraseme in spans:
-							#case 1: oldspan is a subset of eraseme
-							if (eraseme[0] <= oldspan[0] and oldspan[1] <= eraseme[1]):
-								popme.append(i)
-							#case 2: eraseme is a subset of oldspan
-							elif (eraseme[0] >= oldspan[0] and oldspan[1] >= eraseme[1]):
-								popme.append(i)
-								appendme.append([oldspan[0], eraseme[0]])
-								appendme.append([oldspan[1], eraseme[1]])
-							#case 3: eraseme overlaps oldspan
-							elif (eraseme[0] <= oldspan[0] <= eraseme[1]): 
-								e.entities[1].spans[i][0] = max(oldspan[0], eraseme[1])
-							#case 4: oldspan overlaps eraseme 
-							if (eraseme[0] <= oldspan[1] <= eraseme[1]): 
-								e.entities[1].spans[i][0] = min(oldspan[1], eraseme[0])
-					popme = sorted(set(popme))
-					for i in popme[::-1]: e.entities[1].spans.pop(i)
-
-					e.entities[1].spans += appendme
-					found = True
-				if quod.is_what(e): si += 1
-			if not found: 
-				raise ValueError('tms: Could not find subplot {} sequence {}: {}'.format(name, seqi, list2line(cmd)))
-
-		elif cmd[0] == 'delete':
-			if len(cmd) < 4: raise TypeError('tms: Not enough arguments: {}'.format(list2line(cmd)))
-			name = cmd[1]
-			seqi = int(cmd[2])
-			si = 0
-			found = False
-
-			deleteme = sorted([int(x) for x in cmd[3:]])[::-1]
-			for ei, e in enumerate(entities[name]):
-				if si == seqi:
-					for i in deleteme: e.entities[1].spans.pop(i)
-					found = True
-					break
-				if quod.is_what(e): si += 1
-			if not found: 
-				raise ValueError('tms: Could not find subplot {} sequence {}: {}'.format(name, seqi, list2line(cmd)))
+				return (self.subplots == other.subplots) and (self.entities == other.entities) and (self.rows == other.rows)
+			except AttributeError: return False
 
 
-	pass
+class Subplot(object):
+	def __init__(self, name=None, entities=None, ax=None):
+		self.name = name
+		self.entities = {} if entities is None else entities
+		self.mplobjects = {}
+		self.externs = []
+		self.modes = []
+		self.ax = ax
 
-def run_quod(cfg):
+		self.props = {}
 
-	entities = {}
-	maxlens = {}
-	for name in cfg['subplots']:
-		entities[name] = []
-		maxlens[name] = 0
-		mode = cfg['mode'][name]
-		if mode in ('hvordan', 'quod'):
-			if cfg['frag'][name]:
-				for i in range(0, len(cfg['sequences'][name]), 2):
-					entities[name].append(quod.FragmentWhat(cfg['sequences'][name][i], cfg['sequences'][name][i+1]))
-					maxlens[name] = max(maxlens[name], len(entities[name][-1]))
-			else:
-				for seq in cfg['sequences'][name]:
-					entities[name].append(quod.What(seq))
-					maxlens[name] = max(maxlens[name], len(entities[name][-1]))
-		elif mode in ('avehas', ):
-			if avehas3 is None: raise ImportError('Could not find avehas3.py')
-			for seq in cfg['sequences'][name]:
-				entities[name].append(avehas3.Avehas(io.BytesIO(seq.encode('utf-8')), amphi=cfg['amphi'][name]))
-				#print(name, seq, maxlens[name])
-				#for msa in avehas3.AlignIO.parse(
-				#print(len(entities[name][-1]))
-				maxlens[name] = max(maxlens[name], len(entities[name][-1]))
-		elif mode in ('empty', ):
-			spacer = Spacer(length=cfg['baselength'][name])
-			maxlens[name] = cfg['baselength'][name]
-			entities[name].append(spacer)
+		self.ltitle = None
+		self.ctitle = None
+		self.rtitle = None
+		self.title = None
 
-		for seq in cfg['sequences'][name]:
-			#walls
-			if name in cfg['walls']:
-				for walldef in cfg['walls'][name]:
-					entities[name].append(quod.Wall(spans=[[walldef['start'], walldef['end']]], y=walldef['y'], ylim=walldef['lim'], thickness=walldef['thickness'], wedge=walldef['thickness']))
+		self.legend = False
 
-			#domains
-			if name in cfg['domains']:
-				for domaindef in cfg['domains'][name]:
-					entities[name].append(quod.Region(
-						spans=domaindef['xlim'], 
-						yspan=domaindef['ylim'],
-						label=domaindef['label'],
-						style=domaindef['color'],
-						pos=domaindef['pos'],
-						size=domaindef['fontsize'],
-						center=domaindef['halign']
-					))
-		if name in cfg['text']:
-			label = cfg['text'][name]
-			entities[name].append(quod.Text(label['pos'], label['text'], label.get('halign', 'l'), label.get('font', None)))
+		self.xlim = None
+		self._lock_xlim = False
+		self.xscale = None
+		self.ylim = None
+		self._lock_ylim = False
+		self.yscale = None
 
-		if cfg['baselength'][name] is None: cfg['baselength'][name] = maxlens[name]
-		#cfg['length'][name] = maxlens[name]
-		#cfg['weight'][name] = maxlens[name]
-		cfg['length'][name] = cfg['baselength'][name] * cfg['weight'][name]
+		self.xlabel = None
+		self.ylabel = None
 
-	if 'tms' in cfg: do_tms_stuff(entities, cfg)
+		self.length = None
+		self._lock_length = False
 
-	fig = quod.Figure()
-	fig.set_tight_layout(True)
+		self.notms = []
 
-	gs = gridspec.GridSpec(len(cfg['rowscheme']), cfg['hres'])
-	hgap = cfg['hgap']/cfg['width']/2
-	margin = 0.03 if 'margin' not in cfg else cfg['margin']
-	gs.update(
-		left=margin + hgap, 
-		right=cfg['width'] - margin, 
-		top=cfg['height'] - margin-hgap, 
-		bottom=margin, wspace=0)
+	def get_tightbbox(self):
+		totalxlim = [None, None]
+		totalylim = [None, None]
 
-	def get_limit(wt1, wtlist, offset=0): 
-		x = int((offset + wt1/sum(wtlist)) * cfg['hres'])
-		return max(0, min(x, cfg['hres']))
+		for entname in self.entities:
+			entity = self.entities[entname]
+			xlim, ylim = entity.get_bounding_box()
 
-	if True:
+			#FIXME: unify all lim definitions
+			if xlim is None: pass
+			elif totalxlim[0] is None: totalxlim[0] = xlim[0]
+			elif xlim[0] is None: pass
+			else: totalxlim[0] = min(totalxlim[0], xlim[0])
 
-		lims = []
-		cfg['lims'] = {}
-		for namelist in cfg['rowscheme']:
-			row = [cfg['length'][name] for name in namelist]
-			last = -hgap
-			if len(namelist) == 1: 
-				cfg['lims'][namelist[0]] = [0, cfg['hres']]
-			else:
-				bounds = [0]
+			if ylim is None: pass
+			elif totalylim[0] is None: totalylim[0] = ylim[0]
+			elif ylim[0] is None: pass
+			else: totalylim[0] = min(totalylim[0], ylim[0])
 
-				s = 0
-				rawweight = [cfg['length'][name] for name in namelist]
-				weight = [w/sum(rawweight) for w in rawweight]
+			if xlim is None: pass
+			elif totalxlim[1] is None: totalxlim[1] = xlim[1]
+			elif xlim[1] is None: pass
+			else: totalxlim[1] = min(totalxlim[1], xlim[1])
 
-				for i in range(len(namelist) - 1):
-					bounds.append((weight[i] - hgap) * cfg['hres'])
-					bounds.append((weight[i] + hgap) * cfg['hres'])
+			if ylim is None: pass
+			elif totalylim[1] is None: totalylim[1] = ylim[1]
+			elif ylim[1] is None: pass
+			else: totalylim[1] = max(totalylim[1], ylim[1])
 
-				#for i in namelist
+		#FIXME: This will cause problems with stuff down the line! Use a sane default like [0,1], [0,1] next time!
+		if self._lock_xlim: totalxlim = self.xlim
+		if self._lock_ylim: totalylim = self.ylim
 
-
-				bounds.append(cfg['hres'])
-				bounds = [int(x) for x in bounds]
-				
-				for i in range(0, len(namelist)):
-					name = namelist[i]
-					cfg['lims'][name] = [bounds[2*i], bounds[2*i + 1]]
-
-
-
-		axdict = {}
-		for r, row in enumerate(cfg['rowscheme']):
-			for name in row:
-				#axdict[name] = fig.add_subplot(gs[r, cfg['lims'][name][0]:cfg['lims'][name][1]])
-				axdict[name] = fig.add_subplot(gs[r,cfg['lims'][name][0]:cfg['lims'][name][1]])
+		return totalxlim, totalylim
 			
 
-		n = 0
-		name2row = {}
-		stretchlabel = {}
-		firstcol = set()
+	def draw(self, ax=None):
 
-		for r, row in enumerate(cfg['rowscheme']):
-			for c, name in enumerate(row):
-				if not c: firstcol.add(name)
-				name2row[name] = r
-				if 'ylabel' in cfg and name in cfg['ylabel']: ylabel = cfg['ylabel'][name]
-				else: ylabel = '' if c else None
-				yticks = None#[] if c else None
-				plot(cfg, name, fig, axdict[name], entities[name], ylabel=ylabel, yticks=yticks)
+		if ax is None: 
+			if self.ax is None: raise TypeError('No ax defined for subplot')
+			else: ax = self.ax
+		else: ax = ax
+		self.ax = ax
 
-				if c: axdict[name].set_yticklabels([] * len(axdict[name].get_yticklabels()))
+		for entname in self.entities:
+			self.mplobjects[entname] = self.entities[entname].plot(ax)
 
-				try: title = cfg['title'][name]
-				except KeyError: title = chr(65 + n)
+		self.apply_title_props()
+			
+		self.apply_label_props()
+			
+		self.apply_tick_props()
 
-				titlefont = get_titlefont(cfg, name)
-				#TODO: implement rowtitle separately
-				#axdict[name].set_title(cfg['title'].get(name, ''), loc='left', fontsize=titlefont)
+	def apply_label_props(self):
+		xparams = {}
+		yparams = {}
+		xparams.update(self.props.get('label', {}))
+		xparams.update(self.props.get('xlabel', {}))
+		yparams.update(self.props.get('label', {}))
+		yparams.update(self.props.get('ylabel', {}))
 
-				titlepad = quod.matplotlib.rcParams['axes.titlepad']
-				transOffset = matplotlib.transforms.ScaledTranslation(0., titlepad/72., fig.dpi_scale_trans)
+		if self.xlabel is not None: self.ax.set_xlabel(self.xlabel, xparams)
+		if self.ylabel is not None: self.ax.set_ylabel(self.ylabel, yparams)
 
-				if name in cfg['ctitle']:
-					subtitlefont = get_titlefont(cfg, name, subname='ctitle', default=titlefont)
-					t = axdict[name].text(0.5, 1.0, cfg['ctitle'].get(name, ''), 
-						ha='center', va='baseline', fontsize=subtitlefont, transform=axdict[name].transAxes)
-					t.set_transform(axdict[name].transAxes + transOffset)
-				if name in cfg['ltitle']:
-					subtitlefont = get_titlefont(cfg, name, subname='ltitle', default=titlefont)
-					t = axdict[name].text(0.0, 1.0, cfg['ltitle'].get(name, ''), 
-						ha='left', va='baseline', fontsize=subtitlefont, transform=axdict[name].transAxes)
-					t.set_transform(axdict[name].transAxes + transOffset)
-				if name in cfg['rtitle']:
-					subtitlefont = get_titlefont(cfg, name, subname='rtitle', default=titlefont)
-					t = axdict[name].text(1.0, 1.0, cfg['rtitle'].get(name, ''), 
-						ha='right', va='baseline', fontsize=subtitlefont, transform=axdict[name].transAxes)
-					t.set_transform(axdict[name].transAxes + transOffset)
+	def apply_tick_props(self):
+		self.ax.tick_params(axis='both', **self.props.get('ticks', {}))
+		self.ax.tick_params(axis='x', **self.props.get('ticks', {}))
+		self.ax.tick_params(axis='y', **self.props.get('ticks', {}))
 
-				if name in cfg['title']:
-					axdict[name].set_title(cfg['title'].get(name, ''), loc='left', fontsize=titlefont)
-					
-				n += 1
+	def apply_title_props(self):
+		if self.title is None and self.ltitle is None and self.ctitle is None and self.rtitle is None: return
+		if self.ctitle is None and self.title is not None: self.ctitle = self.title
 
-			if len(row) > 1:
-				ax = fig.add_subplot(gs[r,:])
-				ax.set_xticks([0])
-				ax.axes.get_yaxis().set_visible(False)
-				#ax.axes.get_xaxis().set_visible(False)
-				ax.set_frame_on(False)
-				#TODO: expose customizing xlabels per-plot/per-row
-				ax.set_xlabel('Position')
-				ax.tick_params(labelcolor=(1,1,1,0), color=(1,1,1,0))
-				for side in ['left', 'right', 'bottom', 'top']:
-					ax.spines[side].set_color((1,1,1,0))
-					ax.spines[side].set_linewidth(0)
+		titlepad = matplotlib.rcParams['axes.titlepad']
+		transOffset = transforms.ScaledTranslation(0, titlepad/72, self.ax.figure.dpi_scale_trans)
 
-				stretchlabel[r] = ax
-			elif len(row) == 1:
-				#ax = fig.add_subplot(gs[r,:])
-				ax = axdict[row[0]]
-				ax.set_xlabel('Position')
-				stretchlabel[r] = ax
+		titlefont = ltitlefont = ctitlefont = rtitlefont = None
 
-		if 'xlabel' in cfg:
-			for name in cfg['xlabel']:
-				if name.startswith('row:'): 
-					stretchlabel[name2row[name[4:]]].set_xlabel(cfg['xlabel'][name])
-				else:
-					axdict[name].set_xlabel(cfg['xlabel'][name])
-					stretchlabel[name2row[name]].set_xlabel(' ')
-		if 'ylabel' in cfg:
-			for name in cfg['ylabel']:
-				stretchlabel[name2row[name]].set_ylabel(cfg['ylabel'][name])
+		if 'title' in self.props and 'fontsize' in self.props['title']: 
+			titlefont = ltitlefont = ctitlefont = rtitlefont = self.props['title']['fontsize']
 
-		if 'font' in cfg:
-			for name in cfg['font']:
-				for target in cfg['font'][name]:
-					if target.endswith('ticks'):
-						axdict[name].tick_params(labelsize=cfg['font'][name][target])
-						if name in firstcol:
-							stretchlabel[name2row[name]].tick_params(labelsize=cfg['font'][name][target])
-					elif target.endswith('xaxis'):
-						axdict[name].set_xlabel(axdict[name].get_xlabel(), 
-							fontsize=cfg['font'][name][target])
-						stretchlabel[name2row[name]].set_xlabel(stretchlabel[name2row[name]].get_xlabel(), 
-							fontsize=cfg['font'][name][target])
-					elif target.endswith('yaxis'):
-						axdict[name].set_ylabel(axdict[name].get_ylabel(), 
-							fontsize=cfg['font'][name][target])
+		if 'ltitle' in self.props and 'fontsize' in self.props['ltitle']: 
+			ltitlefont = self.props['ltitle']['fontsize']
+		if 'ctitle' in self.props and 'fontsize' in self.props['ctitle']: 
+			ctitlefont = self.props['ctitle']['fontsize']
+		if 'rtitle' in self.props and 'fontsize' in self.props['rtitle']: 
+			rtitlefont = self.props['rtitle']['fontsize']
 
-		#gs.tight_layout(fig, pad=cfg['margin'], w_pad=cfg['hgap'], h_pad=0.0)
-		#gs.tight_layout(fig, pad=0, w_pad=cfg['hgap'], h_pad=cfg['vgap'])
-		gs.tight_layout(fig, pad=cfg['margin'], w_pad=cfg['hgap'], h_pad=cfg['vgap'])
-		fig.savefig(cfg['outfile'], dpi=cfg['dpi'])
+		if self.ltitle is not None:
+			t = self.ax.text(0.0, 1.0, self.ltitle,
+				ha='left', va='baseline', transform=self.ax.transAxes, fontsize=ltitlefont)
+			t.set_transform(self.ax.transAxes + transOffset)
+		if self.ctitle is not None:
+			t = self.ax.text(0.5, 1.0, self.ctitle,
+				ha='center', va='baseline', transform=self.ax.transAxes, fontsize=ctitlefont)
+			t.set_transform(self.ax.transAxes + transOffset)
+		if self.rtitle is not None: 
+			t = self.ax.text(1.0, 1.0, self.rtitle,
+				ha='right', va='baseline', transform=self.ax.transAxes, fontsize=rtitlefont)
+			t.set_transform(self.ax.transAxes + transOffset)
 
-	else: raise NotImplementedError('Unimplemented mode: {}'.format(cfg['mode']))
 
-class Spacer(quod.Entity):
-	def __init__(self, length=200, weight=1.0): 
-		self.length = length
-		self.weight = weight
+	def process_config(self, cfgdict=None):
+		if cfgdict is None: return
 
-	def __len__(self): return self.length
+		for key in cfgdict:
+			if key == 'load': 
+				self.externs = _Parsing.get_list(cfgdict[key])
 
-	def get_bounding_box(self):
-		return np.array([0, 0, self.length * self.weight, 0])
+			elif key == 'ctitle':
+				self.ctitle = cfgdict.get('ctitle')
+			elif key == 'legend':
+				self.legend = cfgdict.getboolean('legend')
+			elif key == 'ltitle':
+				self.ltitle = cfgdict.get('ltitle')
+			elif key == 'rtitle':
+				self.rtitle = cfgdict.get('rtitle')
+			elif key == 'title':
+				self.title = cfgdict.get('title')
+			elif key == 'xlabel':
+				self.xlabel = cfgdict.get('xlabel')
+				self._lock_xlabel = True
+			elif key == 'xlim':
+				self.xlim = [float(x) for x in _Parsing.get_list(cfgdict.get('xlim', ''))]
+				self._lock_xlim = True
+			elif key == 'xscale':
+				self.xscale = cfgdict.getfloat('xscale')
+			elif key == 'ylabel':
+				self.ylabel = cfgdict.get('ylabel')
+				self._lock_ylabel = True
+			elif key == 'ylim':
+				self.ylim = [float(x) for x in _Parsing.get_list(cfgdict.get('ylim', ''))]
+				self._lock_ylim = True
+			elif key == 'yscale':
+				self.yscale = cfgdict.getfloat('yscale')
+			elif key == 'length':
+				self.length = cfgdict.getfloat('length')
+				if self.length: self.length = float(self.length)
+				self._lock_length = True
 
-	def draw(self, plot):
-		plot.ax.set_frame_on(False)
-		plot.ax.set_xticks([])
-		plot.ax.set_yticks([])
-		plot.ax.axes.get_yaxis().set_visible(False)
-		plot.ax.axes.get_xaxis().set_visible(False)
-		plot.ax.tick_params(labelcolor=(1,1,1,0), color=(1,1,1,0), width=0)
-		for side in ['left', 'right', 'bottom', 'top']:
-			plot.ax.spines[side].set_color((1,1,1,0))
-			plot.ax.spines[side].set_linewidth(0)
+			elif key.startswith('mode'):
+				self.modes = _Parsing.get_list(cfgdict.get(key))
+			elif key.startswith('kernel'):
+				self.kernels = _Parsing.get_list(cfgdict.get(key))
+			elif key.startswith('addregion'):
+				regstr = cfgdict.get(key)
+				for obj in _Parsing.get_regions(regstr):
+					#need a better way to hash things
+					#maybe track class and index?
+					for i in range(100, 100+len(self.entities)+1):
+						if 'region{}'.format(i) not in self.entities:
+							self.entities['region{}'.format(i)] = obj
+							break
+				#self.modes = _Parsing.get_list(cfgdict.get('mode'))
+
+			elif key.startswith('addtms'):
+				tmstr = cfgdict.get(key)
+				for obj in _Parsing.get_tmss(tmstr):
+					#need a better way to hash things
+					#maybe track class and index?
+					for i in range(100, 100+len(self.entities)+1):
+						if 'hmmtop{}'.format(i) not in self.entities:
+							self.entities['hmmtop{}'.format(i)] = obj
+							break
+			elif key.startswith('notms'):
+				if cfgdict.get(key).lower() == 'all': self.notms = SetOfAllThings()
+				else: self.notms = _Parsing.get_list(cfgdict.get(key), dtype=int)
+
+			elif '.' in key:
+				entname, propname = key.split('.')
+				if propname == 'font': self.add_prop(entname, propname, cfgdict.getfloat(key))
+				elif propname == 'color': self.add_prop(entname, propname, cfgdict.get(key))
+				elif propname == 'linewidth': self.add_prop(entname, propname, cfgdict.getfloat(key))
+				elif 'size' in propname: self.add_prop(entname, propname, cfgdict.getfloat(key))
+				elif 'alpha' in propname: self.add_prop(entname, propname, cfgdict.getfloat(key))
+				else: self.add_prop(entname, propname, cfgdict.get(key))
+
+				#elif not STRICT: warn('Unrecognized key in subplots: "{}"'.format(key))
+				#else: error('Unrecognized key in subplots: "{}"'.format(key))
+
+			elif not STRICT: warn('Unrecognized key in subplots: "{}"'.format(key))
+			else: error('Unrecognized key in subplots: "{}"'.format(key))
+
+
+		self.modes = _Parsing.get_list(cfgdict.get('mode', ''))
+		self.kernels = _Parsing.get_list(cfgdict.get('kernel', 'flat'))
+		self.windows = [int(x) for x in _Parsing.get_list(cfgdict.get('window', '19'))]
+		self.multiple = cfgdict.get('multiple', 'overlay')
+
+		#do stuff
+
+	def add_prop(self, entname, propname, value, force=True):
+		if force:
+			if entname not in self.props: self.props[entname] = {}
+			if propname not in self.props[entname]: self.props[entname][propname] = {}
+			self.props[entname][propname] = value
+		else:
+			try: self.props[entname][propname]
+			except KeyError: self.add_prop(entname, propname, value)
+
+	def render(self):
+		if self.multiple.startswith('frag'): 
+			allsequences = []
+			for fn in self.externs:
+				allsequences.extend(_Parsing.load_sequences(fn))
+
+			sequences = []
+			fragsequences = []
+			for i, seq in enumerate(allsequences):
+				if i % 2: sequences.append(seq)
+				else: fragsequences.append(seq)
+
+			correction = 0
+
+			if len(self.modes) == 0:
+				self.modes = (['hydropathy'] * len(sequences)) + (['hmmtop'] * len(sequences))
+
+			trueseq = len(sequences)
+			i = 0
+			while len(sequences) < len(self.modes):
+				sequences.append(sequences[i])
+				fragsequences.append(fragsequences[i])
+				i += 1
+
+			for seqi, seq in enumerate(sequences):
+				modestr = self.modes[(seqi + correction) % len(self.modes)]
+				entname = '{}{}'.format(modestr, seqi)
+
+				mode = libquod.entities.Parser.parse_mode(modestr)
+				kernel = self.kernels[(seqi + correction) % len(self.kernels)]
+				window = self.windows[(seqi + correction) % len(self.windows)]
+
+				notms = True if (modestr == 'hmmtop') and (seqi in self.notms) else None
+				obj = mode.compute(seq, window=window, kernel=kernel, fragment=fragsequences[seqi], notms=notms)
+				obj.edgecolor = libquod.entities.get_darkcolor(seqi % trueseq)
+				obj.facecolor = libquod.entities.get_lightcolor(seqi % trueseq)
+
+				self.entities[entname] = obj
+
+				
+				newxlim, newylim = libquod.entities.update_lims(self.xlim, self.ylim, obj.get_bounding_box())
+				if not self._lock_xlim: self.xlim = newxlim
+				if not self._lock_ylim: self.ylim = newylim
+
+			
+		elif self.multiple.startswith('msa'): pass
+
+		#elif self.multiple == 'overlay':
+		#Just assume it's an overlay unless otherwise specified
+		else:
+			sequences = []
+			for fn in self.externs:
+				sequences.extend(_Parsing.load_sequences(fn))
+
+			correction = 0
+
+			if len(self.modes) == 0:
+				self.modes = (['hydropathy'] * len(sequences)) + (['hmmtop'] * len(sequences))
+				#self.modes = ['hydropathy', 'hmmtop'] * len(sequences)
+
+			trueseq = len(sequences)
+			i = 0
+			while len(sequences) < len(self.modes):
+				sequences.append(sequences[i])
+				i += 1
+
+			for seqi, seq in enumerate(sequences):
+				modestr = self.modes[(seqi + correction) % len(self.modes)]
+				entname = '{}{}'.format(modestr, seqi)
+				mode = libquod.entities.Parser.parse_mode(modestr)
+				kernel = self.kernels[(seqi + correction) % len(self.kernels)]
+				window = self.windows[(seqi + correction) % len(self.windows)]
+
+				notms = True if (modestr == 'hmmtop') and (seqi in self.notms) else None
+				obj = mode.compute(seq, window=window, kernel=kernel, notms=notms)
+				obj.edgecolor = libquod.entities.get_darkcolor(seqi % trueseq)
+				obj.facecolor = libquod.entities.get_lightcolor(seqi % trueseq)
+
+				self.entities[entname] = obj
+
+				for propent in self.props:
+					matches = self._fuzzy_find(propent)
+					if matches:
+						for k in matches:
+							for propname in self.props[k]: setattr(obj, propname, self.props[k][propname])
+
+				
+				newxlim, newylim = libquod.entities.update_lims(self.xlim, self.ylim, obj.get_bounding_box())
+				if not self._lock_xlim: self.xlim = newxlim
+				if not self._lock_ylim: self.ylim = newylim
+
+
+		if not self._lock_length: self.length = self.xlim[1] - self.xlim[0]
+
+		for propent in self.props:
+			matches = self._fuzzy_find(propent)
+			if matches:
+				for k in matches:
+					for propname in self.props[propent]: 
+						setattr(self.entities[k], propname, self.props[propent][propname])
+			elif propent in IMPLICIT_ENTITIES: pass
+			else: warn('Could not find entity {} (props: {})'.format(propent, self.props[propent]))
+	
+
+	def _fuzzy_find(self, q):
+		if '-' in q: raise NotImplementedError('Ranged selection not implemented')
+		#specific entid
+		elif re.search('[0-9]+$', q):
+			if q in self.entities: return [q]
+			else: 
+				out = []
+				label = re.findall('^[^-0-9,]+', q)[0]
+				rangestr = re.findall('[-0-9,]+$', q)[0]
+
+				indices = libquod.entities.Parser.expand_ranges(libquod.entities.Parser.parse_ranges(rangestr, dtype=int))
+				
+				for entname in self.entities:
+					if isinstance(entname, str) and entname.startswith(label): 
+						entidlist = re.findall('[0-9]+$', entname)
+						for i in indices:
+							if entidlist and entidlist[0] == str(i): out.append(entname)
+					elif entname == label: out.append(entname)
+		#all ents of a type
+		else:
+			out = []
+			label = re.findall('^[^-0-9,]+', q)[0]
+			for entname in self.entities:
+				if isinstance(entname, str) and entname.startswith(label): out.append(entname)
+				elif entname == label: out.append(entname)
+		return out
+			
+			
+
+class AddParser(argparse.ArgumentParser):
+	def exit(sel, status=0, message=None): pass #maybe send a warning instead
 
 if __name__ == '__main__':
 	parser = argparse.ArgumentParser()
-	parser.add_argument('infile', nargs='*', default=['/dev/stdin'], help='configuration file to load')
+
+	parser.add_argument('infile', help='Config file')
+	parser.add_argument('--show', action='store_true', help='Display the resulting figure')
+	parser.add_argument('--dump', action='store_true', help='Dump entity names')
+
 	args = parser.parse_args()
 
-	cfg = blank_config()
-	for fn in args.infile:
-		with open(fn) as f:
-			parse_config(f, cfg=cfg)
-	if not cfg['outfile']: raise ValueError('No outfile defined ("save FILENAME")')
-	run_quod(cfg)
+	cfg = MultiquodConfig.load(args.infile)
+	cfg.render()
+	cfg.draw(quiet=not args.show)
 
-
+	if args.dump:
+		for subplot in cfg.subplots:
+			print('SUBPLOT:', subplot)
+			print(','.join([str(entity) for entity in cfg.subplots[subplot].entities]))
